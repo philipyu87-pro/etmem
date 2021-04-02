@@ -12,10 +12,10 @@ etmem内存分级扩展技术，通过DRAM+内存压缩/高性能存储新介质
 
     $ git clone https://gitee.com/openeuler/etmem.git
 
-3. 编译和运行依赖
+2. 编译和运行依赖
     etmem的编译和运行依赖于libboundscheck组件
 
-2. 编译
+3. 编译
 
     $ cd etmem
 

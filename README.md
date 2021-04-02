@@ -58,7 +58,7 @@ options：
 
 在运行etmem进程之前，需要管理员预先规划哪些进程需要做内存扩展，将进程信息配置到etmem配置文件中，并配置内存扫描的周期、扫描次数、内存冷热阈值等信息。
 
-配置文件的示例文件在安装etmem软件包后，放置在/etc/etmem/example_conf.yaml，示例内容为：
+配置文件的示例文件在源码包中，放置在源码根目录的conf/example_conf.yaml，建议在使用时放置在/etc/etmem/目录下，示例内容为：
 
 ```
 options:    
@@ -102,7 +102,7 @@ options:
 
 #### 使用方法
 
-通过etmem二进制执行工程创建/删除/查询操作，前提是服务端已经成功运行，并且配置文件/etc/etmem/example_conf.yaml内容正确。
+通过etmem二进制执行工程创建/删除/查询操作，前提是服务端已经成功运行，并且配置文件（e.g. /etc/etmem/example_conf.yaml）内容正确。
 
 添加工程：
 
@@ -175,7 +175,7 @@ show命令：
 
 #### 使用方法
 
-通过etmem二进制执行任务启动/停止操作，前提是服务端已经成功运行，配置文件/etc/etmem/example_conf.yaml内容正确，且etmem工程已经创建。
+通过etmem二进制执行任务启动/停止操作，前提是服务端已经成功运行，配置文件(e.g. /etc/etmem/example_conf.yaml)内容正确，且etmem工程已经创建。
 
 启动工程
 

@@ -79,15 +79,20 @@ static int parse_args(int argc, char *argv[], struct etmem_conf *conf,
 {
     int ret;
 
+    if (argc == 2 && strcmp(argv[1], "help") == 0) { /* 2 means two parameters */
+        usage();
+        return 0;
+    }
+
+    if (argc <= 2) { /* 2 means two parameters */
+        usage();
+        return -EINVAL;
+    }
+
     ret = memset_s(conf, sizeof(struct etmem_conf), 0, sizeof(struct etmem_conf));
     if (ret != EOK) {
         printf("[%s] failed\n", __func__);
         return ret;
-    }
-
-    if (argc <= 1) { /* 1 means etmem must be given parameters */
-        usage();
-        return -EINVAL;
     }
 
     argc--;
@@ -124,11 +129,12 @@ int main(int argc, char *argv[])
     engine_init();
 
     if (parse_args(argc, argv, &conf, &obj) != 0) {
-        if (conf.obj != NULL && strcmp(conf.obj, "help") == 0 &&
-            argc == 2) { /* 2 is for param num of "etmem help" */
-            err = 0;
-        }
         err = -EINVAL;
+        goto out;
+    }
+
+    if (obj == NULL) {
+        err = 0;
         goto out;
     }
 

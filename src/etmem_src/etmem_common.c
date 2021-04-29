@@ -69,36 +69,27 @@ int etmem_parse_check_result(int params_cnt, int argc)
 
 void free_proj_member(struct mem_proj *proj)
 {
-    if (proj->proj_name != NULL) {
-        free(proj->proj_name);
-        proj->proj_name = NULL;
+    if (proj == NULL) {
+        return;
     }
 
-    if (proj->file_name != NULL) {
-        free(proj->file_name);
-        proj->file_name = NULL;
-    }
+    free(proj->proj_name);
+    proj->proj_name = NULL;
 
-    if (proj->sock_name != NULL) {
-        free(proj->sock_name);
-        proj->sock_name = NULL;
-    }
+    free(proj->file_name);
+    proj->file_name = NULL;
 
-    if (proj->eng_name != NULL) {
-        free(proj->eng_name);
-        proj->eng_name = NULL;
-    }
+    free(proj->sock_name);
+    proj->sock_name = NULL;
 
-    if (proj->task_name != NULL) {
-        free(proj->task_name);
-        proj->task_name = NULL;
-    }
+    free(proj->eng_name);
+    proj->eng_name = NULL;
 
-    if (proj->eng_cmd != NULL) {
-        free(proj->eng_cmd);
-        proj->eng_cmd = NULL;
-    }
+    free(proj->task_name);
+    proj->task_name = NULL;
 
+    free(proj->eng_cmd);
+    proj->eng_cmd = NULL;
 }
 
 

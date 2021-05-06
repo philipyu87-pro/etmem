@@ -23,7 +23,7 @@
 #define FILE_LINE_MAX_LEN 1024
 #define KEY_VALUE_MAX_LEN 64
 #define DECIMAL_RADIX 10
-#define ETMEMD_MAX_PARAMETER_NUM 5
+#define ETMEMD_MAX_PARAMETER_NUM 6
 
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof((array)[0]))
 

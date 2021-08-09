@@ -62,34 +62,90 @@ options：
 配置文件的示例文件在源码包中，放置在源码根目录的conf/example_conf.yaml，建议在使用时放置在/etc/etmem/目录下，示例内容为：
 
 ```
-options:    
-	loop : 3
-    interval : 1
-    sleep: 2
-	policies:
-		type : pid/name
-   		value : 123456/mysql
-    	max_threads: 3
-    	engine : slide
-			param:
-				T: 3
+[project]
+name=test
+loop=1
+interval=1
+sleep=1
+
+#slide引擎示例
+[engine]
+name=slide
+project=test
+
+[task]
+project=test
+engine=slide
+name=background_slide
+type=name
+value=mysql
+T=1
+max_threads=1
+
+#cslide引擎示例
+[engine]
+name=cslide
+project=test
+node_pair=2,0;3,1
+hot_threshold=1
+node_mig_quota=1024
+node_hot_reserve=1024
+
+[task]
+project=test
+engine=cslide
+name=background_cslide
+type=pid
+name=23456
+vm_flags=ht
+anon_only=no
+ign_host=no
+
+#thirdparty引擎示例
+[engine]
+name=thirdparty
+project=test
+eng_name=my_engine
+libname=/usr/lib/etmem_fetch/my_engine.so
+ops_name=my_engine_ops
+engine_private_key=engine_private_value
+
+[task]
+project=test
+engine=my_engine
+name=backgroud_third
+type=pid
+value=12345
+task_private_key=task_private_value
 ```
 
 配置文件各字段说明：
+project section
+| 配置项       | 配置项含义               | 是否必须 | 是否有参数 | 参数范围       | 示例说明                                                            |
+|-----------|---------------------|------|-------|------------|-----------------------------------------------------------------|
+| [project] | project公用配置段起始标识    | 否    | 否     | NA         | project参数的开头标识，表示下面的参数直到另外的[xxx]或文件结尾为止的范围内均为project section的参数 |
+| name      | project的名字          | 是    | 是     | 64个字以内的字符串 | 用来标识project，engine和task在配置时需要指定要挂载到的project                     |
+| loop      | 内存扫描的循环次数           | 是    | 是     | 1~10       | loop=3 //扫描3次                                                   |
+| interval  | 每次内存扫描的时间间隔         | 是    | 是     | 1~1200     | interval=5 //每次扫描之间间隔5s                                         |
+| sleep     | 每个内存扫描+操作的大周期之间时间间隔 | 是    | 是     | 1~1200     | sleep=10 //每次大周期之间间隔10s                                         |
 
-| **置项**    | **配置项含义**                                               | **是否必须** | **是否有参数** | **参数范围**              | **示例说明**                                                 |
-| ----------- | ------------------------------------------------------------ | ------------ | -------------- | ------------------------- | ------------------------------------------------------------ |
-| options     | project公用配置段起始标识                                    | 是           | 否             | NA                        | 每个配置文件有且仅有一个此字段，并且文件以此字段开始         |
-| loop        | 内存扫描的循环次数                                           | 是           | 是             | 1~120                     | loop:3 //扫描3次                                             |
-| interval    | 每次内存扫描的时间间隔                                       | 是           | 是             | 1~1200                    | interval:5 //每次扫描之间间隔5s                              |
-| sleep       | 每个内存扫描+操作的大周期之间时间间隔                        | 是           | 是             | 1~1200                    | sleep:10 //每次大周期之间间隔10s                             |
-| policies    | project中各task任务配置段起始标识                            | 是           | 否             | NA                        | 一个project中可以配置多个task，每个task以policies:开头       |
-| type        | 目标进程识别的方式                                           | 是           | 是             | pid/name                  | pid代表通过进程号识别，name代表通过进程名称识别              |
-| value       | 目标进程识别的具体字段                                       | 是           | 是             | 实际的进程号/进程名称     | 与type字段配合使用，指定目标进程的进程号或进程名称，由使用者保证配置的正确及唯一性 |
-| max_threads | etmemd内部线程池最大线程数，每个线程处理一个进程/子进程的内存扫描+操作任务 | 否           | 是             | 1~2 * core数 + 1，默认为1 | 对外部无表象，控制etmemd服务端内部处理线程个数，当目标进程有多个子进程时，配置越大，并发执行的个数也多，但占用资源也越多 |
-| engine      | 扫描引擎类型                                                 | 是           | 是             | slide                     | 声明使用slide引擎进行冷热内存识别                            |
-| param       | 扫描引擎私有参数配置起始标识                                 | 是           | 否             | NA                        | 引擎私有参数配置段以此标识起始，每个task对应一种引擎，每个引擎对应一个param及其字段 |
-| T           | slide引擎的水线配置                                          | 是           | 否             | 1~3 * loop                | 水线阈值，大于等于此值的内存会被识别为热内存，反之为冷内存   |
+engine section
+| 配置项           | 配置项含义                                     | 是否必须               | 是否有参数 | 参数范围                                             | 示例说明                                                         |
+|---------------|-------------------------------------------|--------------------|-------|--------------------------------------------------|--------------------------------------------------------------|
+| [engine]      | engine公用配置段起始标识                           | 否                  | 否     | NA                                               | ngine参数的开头标识，表示下面的参数直到另外的[xxx]或文件结尾为止的范围内均为engine section的参数 |
+| project       | 声明所在的project                              | 是                  | 是     | 64个字以内的字符串                                       | 已经存在名字为test的project，则可以写为project=test                        |
+| engine        | 声明所在的engine                               | 是                  | 是     | slide/cslide/thridparty                          | 声明使用的是slide或cslide或thirdparty策略                              |
+| node_pair     | cslide engine的配置项，声明系统中AEP和DRAM的node pair | engine为cslide时必须配置 | 是     | 成对配置AEP和DRAM的node号，AEP和DRAM之间用逗号隔开，没对pair之间用分号隔开 | node_pair=2,0;3,1                                            |
+| hot_threshold | cslide engine的配置项，声明内存冷热水线的阈值             | engine为cslide时必须配置 | 是     | >= 0的整数                                          | hot_threshold=3 //访问次数小于3的内存会被识别为冷内存                         |
+|node_mig_quota|cslide engine的配置项，流控，声明每次DRAM和AEP互相迁移时单向最大流量|engine为cslide时必须配置|是|>= 0的整数|node_mig_quota=1024 //单位为MB，AEP到DRAM或DRAM到AEP搬迁一次最大1024M|
+|--|--|--|--|--|--|
+|node_hot_reserve|cslide engine的配置项，声明DRAM中热内存的预留空间大小|engine为cslide时必须配置|是|>= 0的整数|node_hot_reserve=1024 //单位为MB，当所有虚拟机热内存大于此配置值时，热内存也会迁移到AEP中|
+|eng_name|thirdparty engine的配置项，声明engine自己的名字，供task挂载|engine为thirdparty时必须配置|是|64个字以内的字符串|eng_name=my_engine //对此第三方策略engine挂载task时，task中写明engine=my_engine|
+|libname|thirdparty engine的配置项，声明第三方策略的动态库的地址，绝对地址|engine为thirdparty时必须配置|是|64个字以内的字符串|libname=/user/lib/etmem_fetch/code_test/my_engine.so|
+|ops_name|thirdparty engine的配置项，声明第三方策略的动态库中操作符号的名字|engine为thirdparty时必须配置|是|64个字以内的字符串|ops_name=my_engine_ops //第三方策略实现接口的结构体的名字|
+|engine_private_key|thirdparty engine的配置项，预留给第三方策略自己解析私有参数的配置项，选配|否|否|根据第三方策略私有参数自行限制|根据第三方策略私有engine参数自行配置|
+
+
 
 ### etmem工程创建/删除/查询
 

@@ -118,7 +118,7 @@ static void *slide_executor(void *arg)
     pthread_cleanup_push(clean_page_refs_unexpected, &page_refs);
     pthread_cleanup_push(clean_page_sort_unexpected, &page_sort);
 
-    page_refs = etmemd_do_scan(tk_pid, tk_pid->tk);
+    page_refs = etmemd_do_scan(tk_pid, tk_pid->tk, NULL, 0);
     if (page_refs == NULL) {
         etmemd_log(ETMEMD_LOG_WARN, "pid %u cannot get page refs\n", tk_pid->pid);
         goto scan_out;

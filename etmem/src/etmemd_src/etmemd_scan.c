@@ -748,7 +748,7 @@ void etmemd_free_page_refs(struct page_refs *pf)
     }
 }
 
-struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task *tk)
+struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task *tk, char *vmflags_array[], int vmflags_num)
 {
     int i;
     struct vmas *vmas = NULL;
@@ -767,7 +767,7 @@ struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task 
     }
 
     /* get vmas of target pid first. */
-    vmas = get_vmas(pid);
+    vmas = etmemd_get_vmas(pid, vmflags_array, vmflags_num, true);
     if (vmas == NULL) {
         etmemd_log(ETMEMD_LOG_ERR, "get vmas for %s fail\n", pid);
         return NULL;

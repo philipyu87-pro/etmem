@@ -240,11 +240,12 @@ static void *memdcd_executor(void *arg)
     struct task_pid *tk_pid = (struct task_pid *)arg;
     struct memdcd_params *memdcd_params = (struct memdcd_params *)(tk_pid->tk->params);
     struct page_refs *page_refs = NULL;
+    char *us = "us";
 
     /* register cleanup function in case of unexpected cancellation detected,
      * and register for memory_grade first, because it needs to clean after page_refs is cleaned */
     pthread_cleanup_push(clean_page_refs_unexpected, &page_refs);
-    page_refs = etmemd_do_scan(tk_pid, tk_pid->tk);
+    page_refs = etmemd_do_scan(tk_pid, tk_pid->tk, &us, 1);
     if (page_refs != NULL) {
         if (memdcd_do_migrate(tk_pid->pid, page_refs, memdcd_params->memdcd_socket) != 0) {
             etmemd_log(ETMEMD_LOG_WARN, "memdcd migrate for pid %u fail\n", tk_pid->pid);

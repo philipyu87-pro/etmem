@@ -269,8 +269,8 @@ static void test_scan_error(void)
     tk = alloc_tk(loop, sleep);
     tpid = alloc_tkpid(pid_error, tk);
 
-    CU_ASSERT_PTR_NULL(etmemd_do_scan(tpid, NULL));
-    CU_ASSERT_PTR_NULL(etmemd_do_scan(tpid, tk));
+    CU_ASSERT_PTR_NULL(etmemd_do_scan(tpid, NULL, NULL, 0));
+    CU_ASSERT_PTR_NULL(etmemd_do_scan(tpid, tk, NULL, 0));
 
     free(tk);
     free(tpid);
@@ -290,7 +290,7 @@ static void test_etmem_scan_ok(void)
 
     CU_ASSERT_EQUAL(etmemd_scan_init(), 0);
 
-    page_refs = etmemd_do_scan(tpid, tk);
+    page_refs = etmemd_do_scan(tpid, tk, NULL, 0);
     CU_ASSERT_PTR_NOT_NULL(page_refs);
     free(tk);
     free(tpid);

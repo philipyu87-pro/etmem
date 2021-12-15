@@ -64,7 +64,7 @@ struct walk_address {
 };
 
 /* the caller need to judge value returned by etmemd_do_scan(), NULL means fail. */
-struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task *tk);
+struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task *tk, char *vmflags_array[], int vmflags_num);
 
 /* free vma list struct */
 void free_vmas(struct vmas *vmas);

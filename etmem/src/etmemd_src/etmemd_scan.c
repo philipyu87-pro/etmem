@@ -820,6 +820,11 @@ void clean_memory_grade_unexpected(void *arg)
     return;
 }
 
+void clean_memory_grade(void *arg)
+{
+    clean_memory_grade_unexpected(arg);
+}
+
 void clean_page_sort_unexpected(void *arg)
 {
     struct page_sort **msg = (struct page_sort **)arg;

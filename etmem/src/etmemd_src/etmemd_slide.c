@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <malloc.h>
+#include <unistd.h>
 
 #include "securec.h"
 #include "etmemd_log.h"
@@ -27,6 +28,7 @@
 #include "etmemd_migrate.h"
 #include "etmemd_pool_adapter.h"
 #include "etmemd_file.h"
+#include "etmemd_lfqueue_exp.h"
 
 static struct memory_grade *slide_policy_interface(struct page_sort **page_sort, const struct task_pid *tpid)
 {
@@ -112,10 +114,10 @@ static void *slide_executor(void *arg)
     struct page_refs *page_refs = NULL;
     struct memory_grade *memory_grade = NULL;
     struct page_sort *page_sort = NULL;
+    struct lfqueue_t *lfqueue = tk_pid->tk->lfqueue;
 
     /* register cleanup function in case of unexpected cancellation detected,
      * and register for memory_grade first, because it needs to clean after page_refs is cleaned */
-    pthread_cleanup_push(clean_memory_grade_unexpected, &memory_grade);
     pthread_cleanup_push(clean_page_refs_unexpected, &page_refs);
     pthread_cleanup_push(clean_page_sort_unexpected, &page_sort);
 
@@ -154,8 +156,12 @@ scan_out:
     }
 
 exit:
-    /* clean memory_grade here */
-    pthread_cleanup_pop(1);
+    if (!lfqueue_is_init(lfqueue)) {
+        clean_page_sort_unexpected(&memory_grade);
+    } else {
+        lfqueue_enqueue(lfqueue, (void *)memory_grade);
+    }
+
     if (malloc_trim(0) == 0) {
         etmemd_log(ETMEMD_LOG_INFO, "malloc_trim to release memory for pid %u fail\n", tk_pid->pid);
     }
@@ -264,21 +270,91 @@ static void slide_stop_task(struct engine *eng, struct task *tk)
     params->executor = NULL;
 }
 
-struct engine_ops g_slide_eng_ops = {
-    .fill_eng_params = NULL,
-    .clear_eng_params = NULL,
-    .fill_task_params = slide_fill_task,
-    .clear_task_params = slide_clear_task,
-    .start_task = slide_start_task,
-    .stop_task = slide_stop_task,
-    .alloc_pid_params = NULL,
-    .free_pid_params = NULL,
-    .eng_mgt_func = NULL,
-};
+static bool can_prefetch(struct task *tk)
+{
+    return lfqueue_has_item(tk->lfqueue);
+}
+
+static void *slide_prefetch(void *arg)
+{
+    struct task *tk = (struct task *)arg;
+    struct memory_grade *memory_grade = NULL;
+
+    while (true) {
+        if (can_prefetch(tk)) {
+            memory_grade = (struct memory_grade *)lfqueue_dequeue(tk->lfqueue);
+            clean_memory_grade_unexpected(&memory_grade);
+        }
+        else
+            sleep(1);
+    }
+
+    return NULL;
+}
+
+static int slide_start_prefetch(struct engine *eng, struct task *tk)
+{
+    lfqueue_init(&tk->lfqueue);
+    pthread_create(&tk->prefetch_thread, NULL, slide_prefetch, tk);
+    pthread_detach(tk->prefetch_thread);
+    return 0;
+}
+
+static void slide_stop_prefetch(struct engine *eng, struct task *tk)
+{
+    if (lfqueue_is_init(tk->lfqueue)) {
+        pthread_cancel(tk->prefetch_thread);
+        lfqueue_destroy(tk->lfqueue);
+    }
+}
+
+// struct engine_ops g_slide_eng_ops = {
+//     .fill_eng_params = NULL,
+//     .clear_eng_params = NULL,
+//     .fill_task_params = slide_fill_task,
+//     .clear_task_params = slide_clear_task,
+//     .start_task = slide_start_task,
+//     .stop_task = slide_stop_task,
+//     .start_prefetch = slide_start_prefetch,
+//     .stop_prefetch = slide_stop_prefetch,
+//     .alloc_pid_params = NULL,
+//     .free_pid_params = NULL,
+//     .eng_mgt_func = NULL,
+// };
+
+static int init_eng_ops(struct engine *eng, GKeyFile *config)
+{
+    enum eng_ops_type g_override_configs[] = {
+        FILL_ENG_PARAMS, CLEAR_ENG_PARAMS, START_PREFETCH, STOP_PREFETCH,
+        ALLOC_PID_PARAMS, FREE_PID_PARAMS, ENG_MGT_FUNC};
+
+    eng->ops = (struct engine_ops *)malloc(sizeof(struct engine_ops));
+
+    if (eng->ops == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc engine ops failed\n");
+        return -1;
+    }
+    memset(eng->ops, 0, sizeof(struct engine_ops));
+
+    eng->ops->fill_task_params = slide_fill_task;
+    eng->ops->clear_task_params = slide_clear_task;
+    eng->ops->start_task = slide_start_task;
+    eng->ops->stop_task = slide_stop_task;
+    eng->ops->start_prefetch = slide_start_prefetch;
+    eng->ops->stop_prefetch = slide_stop_prefetch;
+
+    if (parse_file_override(config, eng, g_override_configs, ARRAY_SIZE(g_override_configs)) != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "override engine ops failed\n");
+        return -1;
+    }
+    return 0;
+}
 
 int fill_engine_type_slide(struct engine *eng, GKeyFile *config)
 {
-    eng->ops = &g_slide_eng_ops;
+    if (init_eng_ops(eng, config) != 0)
+        return -1;
+
     eng->engine_type = SLIDE_ENGINE;
     eng->name = "slide";
     return 0;

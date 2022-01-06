@@ -37,6 +37,8 @@ static int parse_item(GKeyFile *config, char *group_name, struct config_item *it
             val = (void *)g_key_file_get_string(config, group_name, item->key, &error);
             if (val == NULL || strlen(val) == 0) {
                 etmemd_log(ETMEMD_LOG_ERR, "section %s of group [%s] should not be empty\n", item->key, group_name);
+                if (error != NULL)
+                    goto clear_error;
                 return -1;
             }
             break;
@@ -46,11 +48,15 @@ static int parse_item(GKeyFile *config, char *group_name, struct config_item *it
     }
 
     if (error != NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "get value of key %s fail\n", item->key);
-        return -1;
+        goto clear_error;
     }
 
     return item->fill(obj, val);
+
+clear_error:
+    etmemd_log(ETMEMD_LOG_ERR, "get value of key %s fail\n", item->key);
+    g_clear_error(&error);
+    return -1;
 }
 
 int parse_file_config(GKeyFile *config, char *group_name, struct config_item *items, unsigned n, void *obj)

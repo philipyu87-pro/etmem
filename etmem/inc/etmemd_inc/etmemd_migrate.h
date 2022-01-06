@@ -18,6 +18,7 @@
 
 #include "etmemd.h"
 #include "etmemd_task.h"
+#include "etmemd_migrate_exp.h"
 
 #define COLD_PAGE   "/swap_pages"
 
@@ -25,6 +26,7 @@
  * than one 4K page to store the address */
 #define SWAP_LIMIT      200
 #define SWAP_ADDR_LEN   20
+#define MOVE_LIMIT      1 << 16
 
 int etmemd_grade_migrate(const char* pid, const struct memory_grade *memory_grade);
 unsigned long check_should_migrate(const struct task_pid *tk_pid);

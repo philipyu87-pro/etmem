@@ -15,6 +15,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <errno.h>
+#include <numaif.h>
+#include <numa.h>
 
 #include "securec.h"
 #include "etmemd.h"
@@ -158,4 +161,101 @@ unsigned long check_should_migrate(const struct task_pid *tk_pid)
     need_to_swap_page_num = KB_TO_BYTE(vm_rss - vm_cmp) / pagesize;
 
     return need_to_swap_page_num;
+}
+
+int do_migrate(unsigned int pid, struct page_refs *page_refs, int *dest, unsigned long count)
+{
+    unsigned int batch_size = MOVE_LIMIT;
+    void **pages = NULL;
+    void **swap_pages = NULL;
+    int *nodes = NULL;
+    int *status = NULL;
+    unsigned int i = 0;
+    unsigned int j = 0;
+    unsigned int moved = 0;
+    unsigned int swapped = 0;
+    int ret = 0;
+    int failed = 0;
+
+    if (page_refs == NULL) {
+        return 0;
+    }
+
+    if (count < batch_size) {
+        batch_size = count;
+    }
+
+    nodes = (int *)malloc(sizeof(int) * batch_size);
+    if (nodes == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc nodes fail\n");
+        return -1;
+    }
+
+    status = (int *)malloc(sizeof(int) * batch_size);
+    if (status == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc status fail\n");
+        goto free_nodes;
+    }
+
+    pages = malloc(sizeof(void *) * batch_size);
+    if (pages == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc pages fail\n");
+        ret = -1;
+        goto free_status;
+    }
+
+    swap_pages = malloc(sizeof(void *) * batch_size);
+    if (swap_pages == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc swap_pages fail\n");
+        ret = -1;
+        goto free_pages;
+    }
+    
+    while (i != count && page_refs != NULL) {
+        pages[moved] = (void *)page_refs->addr;
+        nodes[moved++] = dest[i++];
+        page_refs = page_refs->next;
+
+        if (moved == batch_size || i == count) {
+            ret = move_pages(pid, moved, pages, nodes, status, MPOL_MF_MOVE_ALL);
+            if (ret != 0) {
+                etmemd_log(ETMEMD_LOG_ERR, "move_pages failed\n");
+                break;
+            }
+
+            for (j = 0; j < moved; j++) {
+                if (status[j] >= 0) {
+                    continue;
+                }
+                if (status[j] == -ENOENT) {
+                    swap_pages[swapped++] = pages[j];
+                    if (swapped == batch_size) {
+                        // TODO swap in
+                        swapped = 0;
+                    }
+                } else {
+                    failed++;
+                }
+            }
+
+            moved = 0;
+        }
+    }
+
+    if (swapped > 0) {
+        // TODO swap in
+    }
+
+    free(swap_pages);
+    swap_pages = NULL;
+free_pages:
+    free(pages);
+    pages = NULL;
+free_status:
+    free(status);
+    status = NULL;
+free_nodes:
+    free(nodes);
+    nodes = NULL;
+    return ret;
 }

@@ -32,6 +32,7 @@ set(ETMEMD_SRC
  ${ETMEMD_SRC_DIR}/etmemd_project.c
  ${ETMEMD_SRC_DIR}/etmemd_engine.c
  ${ETMEMD_SRC_DIR}/etmemd_memdcd.c
+ ${ETMEMD_SRC_DIR}/etmemd_lfqueue.c
  ${ETMEMD_SRC_DIR}/etmemd_slide.c
  ${ETMEMD_SRC_DIR}/etmemd_cslide.c
  ${ETMEMD_SRC_DIR}/etmemd_thirdparty.c

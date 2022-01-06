@@ -496,6 +496,7 @@ struct task *etmemd_add_task(GKeyFile *config)
         etmemd_log(ETMEMD_LOG_ERR, "alloc task struct fail\n");
         return NULL;
     }
+    memset(tk, 0, sizeof(struct task));
 
     /* set default count of the thread pool to 1 */
     tk->max_threads = 1;

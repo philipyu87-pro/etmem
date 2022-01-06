@@ -18,6 +18,7 @@
 
 #include <stdint.h>
 #include <pthread.h>
+#include "etmemd_lfqueue_exp.h"
 
 struct timer_thread_t;
 typedef struct timer_thread_t timer_thread;
@@ -36,6 +37,8 @@ struct task {
     pthread_t task_pt;
     timer_thread *timer_inst;
     thread_pool *threadpool_inst;
+    struct lfqueue_t *lfqueue;        /* lock-free queue for consumer/producer */
+    pthread_t prefetch_thread;
 
     struct task *next;
 };

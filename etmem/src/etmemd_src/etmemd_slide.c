@@ -30,16 +30,17 @@
 
 static struct memory_grade *slide_policy_interface(struct page_sort **page_sort, const struct task_pid *tpid)
 {
-    struct slide_params *slide_params = (struct slide_params *)(tpid->tk->params);
+    struct slide_params *slide_params;
     struct page_refs **page_refs = NULL;
     struct memory_grade *memory_grade = NULL;
     unsigned long need_2_swap_num;
     volatile uint64_t count = 0;
 
-    if (slide_params == NULL) {
+    if (tpid == NULL || tpid->tk == NULL || tpid->tk->params == NULL) {
         etmemd_log(ETMEMD_LOG_ERR, "cannot get params for slide\n");
         return NULL;
     }
+    slide_params = (struct slide_params *)(tpid->tk->params);
 
     memory_grade = (struct memory_grade *)calloc(1, sizeof(struct memory_grade));
     if (memory_grade == NULL) {

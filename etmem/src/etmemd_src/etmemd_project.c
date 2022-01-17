@@ -244,6 +244,9 @@ static void do_remove_task(struct project *proj, struct engine *eng, struct task
     if (proj->start && eng->ops->stop_task != NULL) {
         eng->ops->stop_task(eng, tk);
     }
+    if (proj->start && eng->ops->stop_prefetch != NULL) {
+        eng->ops->stop_prefetch(eng, tk);
+    }
     if (eng->ops->clear_task_params != NULL) {
         eng->ops->clear_task_params(tk);
     }
@@ -280,6 +283,11 @@ enum opt_result etmemd_project_add_task(GKeyFile *config)
     if (eng->ops->fill_task_params != NULL && eng->ops->fill_task_params(config, tk) != 0) {
         etmemd_log(ETMEMD_LOG_ERR, "fill task param fail\n");
         goto remove_task;
+    }
+
+    if (proj->start && eng->ops->start_prefetch != NULL && eng->ops->start_prefetch(eng, tk) != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "start prefetch task %s fail\n", tk->name);
+        goto clear_task;
     }
 
     if (proj->start && eng->ops->start_task != NULL && eng->ops->start_task(eng, tk) != 0) {
@@ -356,6 +364,10 @@ static int project_start_engine(struct project *proj, struct engine *eng)
     }
 
     for (; tk != NULL; tk = tk->next) {
+        if (eng->ops->start_prefetch && eng->ops->start_prefetch(eng, tk) != 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "start prefetch task %s fail.\n", tk->value);
+            ret = -1;
+        }
         if (eng->ops->start_task(eng, tk) != 0) {
             etmemd_log(ETMEMD_LOG_ERR, "start task %s fail.\n", tk->value);
             ret = -1;
@@ -374,6 +386,9 @@ static void project_stop_engine(struct project *proj, struct engine *eng)
     }
     for (; tk != NULL; tk = tk->next) {
         eng->ops->stop_task(eng, tk);
+        if (eng->ops->stop_prefetch) {
+            eng->ops->stop_prefetch(eng, tk);
+        }
     }
 }
 

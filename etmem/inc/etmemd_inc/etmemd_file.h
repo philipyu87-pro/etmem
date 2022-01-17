@@ -20,10 +20,13 @@
 #include <glib.h>
 #include "etmemd_project.h"
 #include "etmemd_task.h"
+#include "etmemd_engine.h"
 
 #define PROJ_GROUP "project"
 #define ENG_GROUP  "engine"
 #define TASK_GROUP "task"
+
+#define OVERRIDE_LIB "override_libname"
 
 enum val_type {
     INT_VAL,
@@ -38,6 +41,7 @@ struct config_item {
 };
 
 int parse_file_config(GKeyFile *config, char *group_name, struct config_item *items, unsigned n, void *obj);
+int parse_file_override(GKeyFile *config, struct engine *eng, enum eng_ops_type *items, unsigned n);
 
 static inline int parse_to_int(void *val)
 {

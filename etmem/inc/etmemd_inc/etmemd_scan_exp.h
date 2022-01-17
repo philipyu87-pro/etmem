@@ -68,4 +68,6 @@ void etmemd_free_vmas(struct vmas *vmas);
 int etmemd_get_page_refs(const struct vmas *vmas, const char *pid, struct page_refs **page_refs, int flags);
 void etmemd_free_page_refs(struct page_refs *page_refs);
 
+void clean_memory_grade(void *arg);
+
 #endif

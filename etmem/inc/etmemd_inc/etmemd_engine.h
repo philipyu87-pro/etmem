@@ -32,6 +32,26 @@ enum eng_type {
     ENGINE_TYPE_CNT,
 };
 
+enum eng_ops_type {
+    FILL_ENG_PARAMS = 0,
+    CLEAR_ENG_PARAMS,
+    FILL_TASK_PARAMS,
+    CLEAR_TASK_PARAMS,
+    START_TASK,
+    STOP_TASK,
+    START_PREFETCH,
+    STOP_PREFETCH,
+    ALLOC_PID_PARAMS,
+    FREE_PID_PARAMS,
+    ENG_MGT_FUNC,
+    ENGINE_OPS_TYPE_CNT,
+};
+
+struct eng_ops_info {
+    char *name;
+    size_t offset;
+};
+
 struct engine *etmemd_engine_add(GKeyFile *config);
 void etmemd_engine_remove(struct engine *eng);
 

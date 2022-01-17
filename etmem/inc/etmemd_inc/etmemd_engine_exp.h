@@ -44,6 +44,8 @@ struct engine_ops {
     void (*clear_task_params)(struct task *tk);
     int (*start_task)(struct engine *eng, struct task *tk);
     void (*stop_task)(struct engine *eng, struct task *tk);
+    int (*start_prefetch)(struct engine *eng, struct task *tk);
+    void (*stop_prefetch)(struct engine *eng, struct task *tk);
     int (*alloc_pid_params)(struct engine *eng, struct task_pid **tk_pid);
     void (*free_pid_params)(struct engine *eng, struct task_pid **tk_pid);
     int (*eng_mgt_func)(struct engine *eng, struct task *tk, char *cmd, int fd);

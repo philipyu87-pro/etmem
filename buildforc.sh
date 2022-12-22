@@ -14,12 +14,7 @@
 
 # shellcheck disable=SC2154,SC2034
 
-BASEPATH=$( cd -- "$( dirname -- "${BASH_SOURCE[0]:-$0}" )" &> /dev/null && pwd )
-ROOTDIR="$BASEPATH"
-PROGRAM=$(basename "${BASH_SOURCE[0]:-$0}")
-
-# git clone https://gitee.com/mindspore/mindspore.git
-export PATH="$PATH:/usr/local/llvm/bin"
-llvm-as --version
-# bash build.sh -p mindspore/lib -j2 -S on
-bash build.sh
+mkdir -p build
+cd build
+cmake .. 
+make

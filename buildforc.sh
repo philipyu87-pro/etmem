@@ -14,6 +14,8 @@
 
 # shellcheck disable=SC2154,SC2034
 
+ulimit -u
+ulimit -a
 mkdir -p build
 cd build
 cmake .. 

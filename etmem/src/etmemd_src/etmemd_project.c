@@ -147,7 +147,7 @@ static enum opt_result engine_of_group(GKeyFile *config, const char *group_name,
     // real engine name is set with "eng_name" for thirdparty engine
     if (strcmp(eng_name, "thirdparty") == 0 && strcmp(group_name, ENG_GROUP) == 0) {
         free(eng_name);
-        eng_name = NULL
+        eng_name = NULL;
         ret = get_name_by_key(config, ENG_GROUP, "eng_name", &eng_name);
         if (ret != OPT_SUCCESS) {
             return ret;

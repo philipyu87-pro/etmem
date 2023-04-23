@@ -155,8 +155,9 @@ static enum opt_result engine_of_group(GKeyFile *config, const char *group_name,
     }
 
     *eng = get_eng_by_name(proj, eng_name);
-    if (eng_name)
-        free(eng_name);      
+    if (eng_name) {
+        free(eng_name);
+    }             
     return OPT_SUCCESS;
 }
 

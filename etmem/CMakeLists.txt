@@ -41,7 +41,9 @@ set(ETMEMD_SRC
  ${ETMEMD_SRC_DIR}/etmemd_threadtimer.c
  ${ETMEMD_SRC_DIR}/etmemd_pool_adapter.c
  ${ETMEMD_SRC_DIR}/etmemd_migrate.c
- ${ETMEMD_SRC_DIR}/etmemd_damon.c)
+ ${ETMEMD_SRC_DIR}/etmemd_damon.c
+ ${ETMEMD_SRC_DIR}/pmu_hash.c
+ ${ETMEMD_SRC_DIR}/pmu_scan.c)
 
 set(ETMEM_SRC
  ${ETMEM_SRC_DIR}/etmem.c
@@ -85,6 +87,7 @@ if(CONFIG_DEBUG STREQUAL "y")
  target_compile_options(etmemd PRIVATE -g)
 endif()
 
+
 set_target_properties(etmemd PROPERTIES LINK_FLAGS "-s -fPIE -pie -fPIC -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines")
 target_link_libraries(etmemd PRIVATE pthread dl rt boundscheck numa ${GLIB2_LIBRARIES})
 
@@ -106,7 +109,8 @@ if(CONFIG_DEBUG STREQUAL "y")
  target_compile_options(etmem PRIVATE -g)
 endif()
 
-set_target_properties(etmem PROPERTIES LINK_FLAGS "-s -fPIE -pie -fPIC -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines")
+
+set_target_properties(etmem PROPERTIES LINK_FLAGS "-fPIE -pie -fPIC -Wl,-z,relro,-z,now,-z,noexecstack -Wtrampolines")
 target_link_libraries(etmem PRIVATE pthread dl rt boundscheck)
 
 if( ${ARCHITECTURE} STREQUAL "aarch64" )

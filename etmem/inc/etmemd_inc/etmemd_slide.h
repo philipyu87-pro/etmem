@@ -22,6 +22,8 @@
 struct slide_params {
     struct task_executor *executor;
     int t;          /* watermark */
+    int use_pmu;    /* 0 is etmemd_scan and 1 is pmu_scan */
+    int pmu_period;      /* pmu sample period */
     unsigned long swap_threshold;
     uint8_t dram_percent;
 };

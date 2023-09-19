@@ -1,12 +1,12 @@
 [project]
 name=test
 scan_type=page
-loop=1
+loop=4
 interval=1
 sleep=1
-sysmem_threshold=50
-swapcache_high_wmark=10
-swapcache_low_wmark=6
+#sysmem_threshold=50
+#swapcache_high_wmark=10
+#swapcache_low_wmark=6
 
 [engine]
 name=slide
@@ -17,8 +17,13 @@ project=test
 engine=slide
 name=background_slide
 type=name
-value=mysql
-T=1
-max_threads=1
-swap_threshold=10g
-swap_flag=yes
+value=redis-server
+T=3
+dram_percent=50
+#max_threads=1
+#swap_threshold=10g
+#swap_flag=yes
+
+use_pmu=1
+pmu_period=5000
+

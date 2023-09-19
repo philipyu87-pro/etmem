@@ -116,6 +116,8 @@ type=name
 value=mysql
 T=1
 max_threads=1
+use_pmu=1  #1表示使用pmu扫描策略
+pmu_period=5000  #pmu的采样周期
 
 #cslide引擎示例
 [engine]
@@ -191,6 +193,9 @@ task_private_key=task_private_value
 | task_private_key | engine为thirdparty的task配置项，预留给第三方策略的task解析私有参数的配置项，选配           | 否                 | 否 | 根据第三方策略私有参数自行限制      | 根据第三方策略私有task参数自行配置                                             |
 | swap_threshold |slide engine的配置项，进程内存换出阈值           | 否                 | 是 | 进程可用内存绝对值      | swap_threshold=10g //进程占用内存在低于10g时不会触发换出。<br>当前版本下，仅支持g/G作为内存绝对值单位。与sysmem_threshold配合使用，仅系统内存低于阈值时，进行白名单中进程阈值判断 |
 | swap_flag|slide engine的配置项，进程指定内存换出           | 否                 | 是 | yes/no      | swap_flag=yes//使能进程指定内存换出 |
+| use_pmu  |slide engine的配置项，指定是否采用pmu扫描        | 否                 | 是 | 1/0      | use_pmu=1//表示采用pmu扫描，反之则是etmem_scan |
+| pmu_period |slide engine的配置项，指定pmu采样周期       | 否                 | 是 | [1000,10000]推荐参数范围     | pmu_period=5000//表示采样的周期是5000|
+
 
 
 ### etmem project/engine/task对象的创建和删除

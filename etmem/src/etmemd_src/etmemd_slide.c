@@ -28,6 +28,7 @@
 #include "etmemd_migrate.h"
 #include "etmemd_pool_adapter.h"
 #include "etmemd_file.h"
+#include "pmu_scan.h"
 
 static struct memory_grade *slide_policy_interface(struct page_sort **page_sort, const struct task_pid *tpid)
 {
@@ -211,7 +212,7 @@ static void *slide_executor(void *arg)
     struct page_refs *page_refs = NULL;
     struct memory_grade *memory_grade = NULL;
     struct page_sort *page_sort = NULL;
-
+    struct slide_params *params = tk_pid->tk->params;
     /* The pthread_setcancelstate interface returns an error only when the
      * input parameter state is invalid, no need to check return value.
      */
@@ -223,8 +224,15 @@ static void *slide_executor(void *arg)
     if (check_should_swap(tk_pid) == DONT_SWAP) {
         goto scan_out;
     }
-
-    page_refs = etmemd_do_scan(tk_pid, tk_pid->tk);
+    if(params->use_pmu==0)
+    {
+        etmemd_log(ETMEMD_LOG_INFO, "use scan for slide\n\n");
+        page_refs = etmemd_do_scan(tk_pid, tk_pid->tk);
+    }
+    else {
+        etmemd_log(ETMEMD_LOG_INFO, "use pmu_sample for slide\n\n");
+        page_refs = etmemd_pmu_scan(tk_pid, tk_pid->tk); 
+    }
     if (page_refs == NULL) {
         etmemd_log(ETMEMD_LOG_WARN, "pid %u cannot get page refs\n", tk_pid->pid);
         goto scan_out;
@@ -268,7 +276,96 @@ exit:
 
     return NULL;
 }
+// static void *pmu_slide_executor(void* arg)
+// {
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_sample begin\n");
+//     struct task_pid *tk_pid = (struct task_pid *)arg;
+//     struct page_refs *page_refs = NULL;
+//     struct memory_grade *memory_grade = NULL;
+//     struct page_sort *page_sort = NULL; 
+//     struct slide_params *params = tk_pid->tk->params;
+//     channel** cs = (channel**)malloc(sizeof(channel)*2);
+//     init_channels(params->pmu_period, tk_pid->pid, cs);
+//     int sample_count = 0;
+//     hash_page_list = NULL;
+//     struct page_scan *page_scan = (struct page_scan *)(tk_pid->tk)->eng->proj->scan_param;
+//     int loop_count = page_scan->loop;
+//     /* The pthread_setcancelstate interface returns an error only when the
+//      * input parameter state is invalid, no need to check return value.
+//      */
+    
+//     (void)pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+//     /* register cleanup function in case of unexpected cancellation detected */
+//     pthread_cleanup_push(clean_page_refs_unexpected, &page_refs);
 
+//     if (check_should_swap(tk_pid) == DONT_SWAP) {
+//         goto exit;
+//     }
+//     int check_migrate = 0;
+//     address_space_init(tk_pid,&page_refs); 
+        
+//     while(!check_migrate)
+//     {
+//         struct page_refs* tmp = NULL;
+//         tmp = etmemd_do_sample(tk_pid, tk_pid->tk,cs[0]);
+        
+//         if(tmp!=NULL)
+//         {
+//             if(tmp->count > loop_count) tmp->count = loop_count;
+//         }
+//         tmp = etmemd_do_sample(tk_pid, tk_pid->tk,cs[1]);
+//         if(tmp!=NULL)
+//         {
+//             if(tmp->count > loop_count) tmp->count = loop_count;
+//         } 
+//         sample_count += 2;
+//         if(sample_count > MAX_SAMPLE_COUNT) check_migrate = 1;
+//     }
+//     if (page_refs == NULL) {
+//         etmemd_log(ETMEMD_LOG_WARN, "pmu_plus_slide executor: pid %u cannot get page refs\n", tk_pid->pid);
+//         goto exit;
+//     }
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: begin sort !\n");
+//     page_sort = sort_page_refs(&page_refs, tk_pid);
+//     if (page_sort == NULL) {
+//         etmemd_log(ETMEMD_LOG_ERR, "pmu_plus_slide executor: failed to alloc memory for page sort.", tk_pid->pid);
+//         goto exit;
+//     }
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: begin policy !\n");
+//     memory_grade = slide_policy_interface(&page_sort, tk_pid); 
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: del page sort\n");
+//     clean_page_sort_unexpected(&page_sort);
+//     pthread_cleanup_pop(1); 
+//     if (memory_grade == NULL) {
+//         etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: pid %u memory grade is empty\n", tk_pid->pid);
+//         goto exit;
+//     }
+
+//     if (slide_do_migrate(tk_pid->pid, memory_grade) != 0) {
+//         etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: slide migrate for pid %u fail\n", tk_pid->pid);
+//     }
+
+//     if (etmemd_reclaim_swapcache(tk_pid) != 0) {
+//         etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: etmemd_reclaim_swapcache pid %u fail\n", tk_pid->pid);
+//     }
+//     /***above finish migration***/
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: del?\n");
+
+// exit:
+//     // clean_page_refs_unexpected(&page_refs);
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: del page memory grade\n"); 
+//     clean_memory_grade_unexpected(&memory_grade);
+//     page_refs = NULL;
+//     memory_grade = NULL; 
+//     page_sort = NULL;
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: init again\n");
+//     hash_page_list = NULL;
+//     sample_count = 0;
+//     etmemd_log(ETMEMD_LOG_INFO, "pmu_plus_slide executor: finish migration, begin sampling again\n");
+//     (void)pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
+//     pthread_testcancel();
+//     return NULL;
+// }
 static int fill_task_threshold(void *obj, void *val)
 {
     struct slide_params *params = (struct slide_params *)obj;
@@ -319,10 +416,43 @@ static int fill_task_swap_threshold(void *obj, void *val)
     return 0;
 }
 
+static int fill_task_use_pmu(void *obj, void *val)
+{
+    struct slide_params *params = (struct slide_params *)obj;
+    int value = parse_to_int(val);
+
+    if (value != 0 && value != 1) {
+        etmemd_log(ETMEMD_LOG_WARN,
+                    "use_pmu flag %d is abnormal, the reasonable is 0 for etmemd_scan and 1 for pmu_scan\n", value);
+        value = 0;
+    }
+
+    params->use_pmu = value;
+
+    return 0;
+}
+static int fill_task_pmu_period(void *obj, void *val)
+{
+    struct slide_params *params = (struct slide_params *)obj;
+    int value = 5000;
+
+    if (value <= 0) {
+        etmemd_log(ETMEMD_LOG_WARN,
+                    "pmu_period %d is abnormal, the reasonable value should bigger than 1 and not too small,[1000,10000] is recommanded!\n", value);
+        value = 0;
+    }
+
+    params->pmu_period = value;
+
+    return 0;
+}
 static struct config_item g_slide_task_config_items[] = {
     {"T", INT_VAL, fill_task_threshold, false},
     {"swap_threshold", STR_VAL, fill_task_swap_threshold, true},
     {"dram_percent", INT_VAL, fill_task_dram_percent, true},
+    {"use_pmu", INT_VAL, fill_task_use_pmu, false},
+    {"pmu_period", INT_VAL, fill_task_pmu_period, true},
+
 };
 
 static int slide_fill_task(GKeyFile *config, struct task *tk)
@@ -371,7 +501,7 @@ static int slide_start_task(struct engine *eng, struct task *tk)
     }
 
     params->executor->tk = tk;
-    params->executor->func = slide_executor;
+    params->executor->func = slide_executor; 
     if (start_threadpool_work(params->executor) != 0) {
         free(params->executor);
         params->executor = NULL;

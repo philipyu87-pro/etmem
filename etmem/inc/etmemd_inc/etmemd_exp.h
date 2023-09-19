@@ -17,7 +17,7 @@
 #define ETMEMD_EXP_H
 
 #include <stdint.h>
-
+#include "uthash.h" 
 /*
  * page type specified by size
  * */
@@ -35,7 +35,7 @@ struct page_refs {
     uint64_t addr;              /* page address */
     int count;                  /* page count */
     enum page_type type;        /* page type including PTE/PMD/PUD */
-
+    UT_hash_handle hh;
     struct page_refs *next;     /* point to next page */
 };
 

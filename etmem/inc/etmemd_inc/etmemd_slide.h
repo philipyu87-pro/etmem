@@ -24,6 +24,11 @@ struct pmu_params {
     uint64_t sample_period;  /* Sampling mem access events every N instructions */
     uint32_t vma_updata_rate;  /* Update after every N slide migrations */
     uint32_t cpu_set_size;    /* Number of CPU cores sampled by one thread */
+    struct vma_info *vma_list;
+    struct page_refs *g_page_refs;
+    struct sample_thread_meta *g_threads_meta_set;
+    pthread_mutex_t vma_list_mutex;
+    int g_vma_updata_count;
 };
 #endif
 

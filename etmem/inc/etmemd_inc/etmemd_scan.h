@@ -74,12 +74,8 @@ struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task 
 #ifdef ENABLE_PMU
 #define BITS_IN_INT (sizeof(int) * CHAR_BIT) // get the number of bits in an int
 /* Assume the hardware events count following a power-law distribution */
-inline int limit_count_to_loop(int count, int loop) 
-{
-    int log2 =(int)(BITS_IN_INT - __builtin_clz(count));
-    return loop < log2 ? loop : log2;
-}
-void merge_page_refs(struct page_sort **page_sort, struct memory_grade **memory_grade);
+int limit_count_to_loop(int count, int loop);
+void merge_page_refs(struct task_pid *tpid, struct page_sort **page_sort, struct memory_grade **memory_grade);
 
 /* get the page_ref list from the buffer, if the pmu_sample thread has not been started, start the thread. */
 struct page_refs *etmemd_do_sample(struct task_pid *tpid, const struct task *tk);

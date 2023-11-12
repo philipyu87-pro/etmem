@@ -40,8 +40,8 @@
 #define MMAP_SIZE                ((1 + RING_BUFFER_PAGES) * PAGE_SIZE)
 #define PT_LEVEL_OFFEST          9
 #define PTE_OFFSET               12
-#define PMD_OFFEST               ( PTE_OFFSET + PT_LEVEL_OFFEST )
-#define PUD_OFFEST               ( PMD_OFFEST + PT_LEVEL_OFFEST )
+#define PMD_OFFEST               (PTE_OFFSET + PT_LEVEL_OFFEST)
+#define PUD_OFFEST               (PMD_OFFEST + PT_LEVEL_OFFEST)
 #define SYS_CORES                sysconf(_SC_NPROCESSORS_ONLN)
 #define PERF_PRECISE_IP          3
 #define PERF_LEFT_SHIFT          4
@@ -109,7 +109,8 @@ const char *g_events[EVENT_NUM][ARCH_NUM] = {
     }
 };
 
-static struct vma_info *get_vma_info(const struct task_pid *tpid , uint64_t addr) {
+static struct vma_info *get_vma_info(const struct task_pid *tpid, uint64_t addr)
+{
     struct vma_info *node;
     struct slide_params *params = tpid->tk->params;
     pthread_mutex_lock(&(params->pmu_params->vma_list_mutex));
@@ -123,13 +124,14 @@ static struct vma_info *get_vma_info(const struct task_pid *tpid , uint64_t addr
     return NULL;
 }
 
-int limit_count_to_loop(int count, int loop) 
+int limit_count_to_loop(int count, int loop)
 {
-    int log2 =(int)(BITS_IN_INT - __builtin_clz(count));
+    int log2 = (int)(BITS_IN_INT - __builtin_clz(count));
     return loop < log2 ? loop : log2;
 }
 
-static struct page_refs *get_page_refs_form_list(const struct task_pid *tpid, uint64_t addr) {
+static struct page_refs *get_page_refs_form_list(const struct task_pid *tpid, uint64_t addr)
+{
     struct vma_info *node;
     struct page_refs *page;
     unsigned index;
@@ -154,7 +156,8 @@ static struct page_refs *get_page_refs_form_list(const struct task_pid *tpid, ui
     return NULL;
 }
 
-static int update_vmas_new(const struct task_pid *tpid, struct vmas *vmas) {
+static int update_vmas_new(const struct task_pid *tpid, struct vmas *vmas)
+{
     struct vma *tmp_vma = vmas->vma_list;
     struct slide_params *params = tpid->tk->params;
     while (tmp_vma != NULL) {
@@ -183,7 +186,8 @@ static int update_vmas_new(const struct task_pid *tpid, struct vmas *vmas) {
     return 0;
 }
 
-static struct page_refs *update_page_refs_in_vma_new(struct page_refs *page_refs, struct vma_info **vma_info){
+static struct page_refs *update_page_refs_in_vma_new(struct page_refs *page_refs, struct vma_info **vma_info)
+{
     struct page_refs *pf;
     unsigned index;
 
@@ -215,7 +219,7 @@ static struct page_refs *update_page_refs_in_vma_new(struct page_refs *page_refs
 
 static int update_page_refs(const struct task_pid *tpid, struct page_refs *page_refs)
 {
-    struct page_refs * tmp_page_refs = page_refs;
+    struct page_refs *tmp_page_refs = page_refs;
     while (tmp_page_refs != NULL) {
         struct vma_info *vma_info = NULL;
         vma_info = get_vma_info(tpid, tmp_page_refs->addr);
@@ -228,7 +232,8 @@ static int update_page_refs(const struct task_pid *tpid, struct page_refs *page_
     return 0;
 }
 
-static void clear_old_vmas(const struct task_pid *tpid, struct vmas *vmas) {
+static void clear_old_vmas(const struct task_pid *tpid, struct vmas *vmas)
+{
     struct vma *tmp_vma = vmas->vma_list;
     struct slide_params *params = tpid->tk->params;
     struct vma_info *node = params->pmu_params->vma_list;
@@ -291,7 +296,7 @@ static int update_page_refs_from_vma(const struct task_pid *tpid, struct page_re
     if (ret != 0) {
         etmemd_log(ETMEMD_LOG_ERR, "update_vmas for %s fail\n", pid);
         return ret;
-    } 
+    }
 
     ret = update_page_refs(tpid, tmp_pf);
     if (ret != 0) {
@@ -624,7 +629,6 @@ static void parse_sample_record(const struct task_pid *tk_pid, struct perf_cpu_m
     address = get_event_addr(cpu_monitor);
     if (address != NULL) {
         page = get_page_refs_form_list(tk_pid, (uint64_t)address);
-
         if (page == NULL) {
             return;
         } else {
@@ -685,7 +689,7 @@ static void pmu_threads_out(struct slide_params *params, int cpu_set_count)
     }
 }
 
-static int etmemd_start_sample_thread(struct task_pid *tk_pid , int cpu_set_count, int cpu_set_size,
+static int etmemd_start_sample_thread(struct task_pid *tk_pid, int cpu_set_count, int cpu_set_size,
                                       struct perf_cpu_monitor **perf_cpu_monitors)
 {
     int i;
@@ -751,7 +755,8 @@ static int etmemd_start_sample_threads(struct task_pid *tk_pid)
         goto event_out;
     }
 
-    params->pmu_params->g_threads_meta_set = (struct sample_thread_meta *)calloc(cpu_set_count, sizeof(struct sample_thread_meta));
+    params->pmu_params->g_threads_meta_set = (struct sample_thread_meta *)calloc(cpu_set_count, \
+        sizeof(struct sample_thread_meta));
     if (params->pmu_params->g_threads_meta_set == NULL) {
         etmemd_log(ETMEMD_LOG_ERR, "malloc for g_threads_meta_set fail\n");
         ret = -1;

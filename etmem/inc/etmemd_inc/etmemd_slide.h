@@ -27,8 +27,8 @@ struct pmu_params {
     struct vma_info *vma_list;
     struct page_refs *g_page_refs;
     struct sample_thread_meta *g_threads_meta_set;
-    int g_vma_updata_count;
     pthread_mutex_t vma_list_mutex;
+    int g_vma_updata_count;
 };
 #endif
 

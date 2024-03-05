@@ -46,10 +46,16 @@ static void get_task_pids_errinput(char *pid_val, char *pid_type, int exp)
     tk = (struct task *)calloc(1, sizeof(struct task));
     CU_ASSERT_PTR_NOT_NULL(tk);
 
+    tk->eng = (struct engine *)calloc(1, sizeof(struct engine));
+    CU_ASSERT_PTR_NOT_NULL(tk->eng);
+
     tk->type = pid_type;
     tk->value = pid_val;
+    tk->eng->engine_type = SLIDE_ENGINE;
+
     CU_ASSERT_EQUAL(etmemd_get_task_pids(tk, true), exp);
 
+    free(tk->eng);
     free(tk);
 }
 
@@ -61,6 +67,13 @@ static void test_get_task_pids_error(void)
     get_task_pids_errinput("1", "wrong", -1);
     get_task_pids_errinput("wrong", "name", -1);
     get_task_pids_errinput("-1", "pid", -1);
+    get_task_pids_errinput("", "isula", -1);
+    get_task_pids_errinput("1", "isula", -1);
+    get_task_pids_errinput("123", "isula", -1);
+    get_task_pids_errinput("-1", "isula", -1);
+    get_task_pids_errinput("wrong", "isula", -1);
+    get_task_pids_errinput("longgerthan15charparam", "isula", -1);
+    get_task_pids_errinput("d04e3f40bd09", "isula", -1);
 }
 
 static void add_process(int index)
@@ -197,6 +210,23 @@ static void test_get_task_withname_ok(void)
     CU_ASSERT_PTR_NULL(tk);
 }
 
+static void test_get_task_withisula_error(void)
+{
+    char *pid_val = "00000131aa94";
+    char *pid_type = "isula";
+    struct task *tk = NULL;
+
+    tk = alloc_task(pid_type, pid_val);
+
+    CU_ASSERT_EQUAL(etmemd_get_task_pids(tk, true), -1);
+
+    etmemd_free_task_pids(tk);
+    CU_ASSERT_PTR_NULL(tk->pids);
+
+    etmemd_free_task_struct(&tk);
+    CU_ASSERT_PTR_NULL(tk);
+}
+
 static int get_task_pid(char *type, char *value, struct task *tk)
 {
     char pid[PID_STR_MAX_LEN] = {0};
@@ -296,6 +326,7 @@ int main(int argc, const char **argv)
     }
 
     if (CU_ADD_TEST(suite, test_get_task_pids_error) == NULL ||
+        CU_ADD_TEST(suite, test_get_task_withisula_error) == NULL ||
         CU_ADD_TEST(suite, test_get_task_withpid_ok) == NULL ||
         CU_ADD_TEST(suite, test_get_task_withname_ok) == NULL ||
         CU_ADD_TEST(suite, test_get_pid_error) == NULL ||

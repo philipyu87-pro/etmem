@@ -24,6 +24,21 @@
 #include "etmemd_project.h"
 #include "etmemd_engine.h"
 
+static struct task_child_pid_params *alloc_task_child_pid_node(unsigned int pid, struct task_pid *tk_pid)
+{
+    struct task_child_pid_params *task_child_pid = NULL;
+
+    task_child_pid = (struct task_child_pid_params *)calloc(1, sizeof(struct task_child_pid_params));
+    if (task_child_pid == NULL) {
+        return NULL;
+    }
+
+    task_child_pid->child_pid = pid;
+    task_child_pid->tpid = tk_pid;
+
+    return task_child_pid;
+}
+
 static struct task_pid *alloc_tkpid(unsigned int pid, struct task *tk)
 {
     struct task_pid *tpid = NULL;
@@ -271,16 +286,26 @@ static void test_scan_error(void)
     int sleep = 1;
     struct task_pid *tpid = NULL;
     struct task *tk = NULL;
+    struct task_child_pid_params *task_child_pid = NULL;
 
     tk = alloc_tk(loop, sleep);
     tpid = alloc_tkpid(pid_error, tk);
 
-    CU_ASSERT_PTR_NULL(etmemd_do_scan(tpid, NULL));
-    CU_ASSERT_PTR_NULL(etmemd_do_scan(tpid, tk));
+    tk->pids = tpid;
+    task_child_pid = alloc_task_child_pid_node(pid_error, tk->pids);
+    tk->pids->params = task_child_pid;
+    tk->pids->pid = task_child_pid->child_pid;
+
+    CU_ASSERT_NOT_EQUAL(etmemd_do_scan(NULL), 0);
+    tpid->tk = NULL;
+    CU_ASSERT_NOT_EQUAL(etmemd_do_scan(tpid), 0);
+    tpid->tk = tk;
+    CU_ASSERT_NOT_EQUAL(etmemd_do_scan(tpid), 0);
 
     free(tk->eng->proj->scan_param);
     free(tk->eng->proj);
     free(tk->eng);
+    free(task_child_pid);
     free(tk);
     free(tpid);
 }
@@ -290,24 +315,27 @@ static void test_etmem_scan_ok(void)
     unsigned int pid_ok = 1;
     int loop = 1;
     int sleep = 1;
-    struct page_refs *page_refs = NULL;
     struct task_pid *tpid = NULL;
     struct task *tk = NULL;
+    struct task_child_pid_params *task_child_pid = NULL;
 
     tk = alloc_tk(loop, sleep);
     tpid = alloc_tkpid(pid_ok, tk);
+    tk->pids = tpid;
+    task_child_pid = alloc_task_child_pid_node(pid_ok, tk->pids);
+    tk->pids->params = task_child_pid;
+    tk->pids->pid = task_child_pid->child_pid;
 
     CU_ASSERT_EQUAL(etmemd_scan_init(), 0);
 
-    page_refs = etmemd_do_scan(tpid, tk);
-    CU_ASSERT_PTR_NOT_NULL(page_refs);
+    CU_ASSERT_EQUAL(etmemd_do_scan(tpid), 0);
     free(tk->eng->proj->scan_param);
     free(tk->eng->proj);
     free(tk->eng);
     free(tk);
     free(tpid);
-    clean_page_refs_unexpected(&page_refs);
-    CU_ASSERT_PTR_NULL(page_refs);
+    clean_page_refs_unexpected(&task_child_pid->page_refs);
+    free(task_child_pid);
     etmemd_scan_exit();
 }
 

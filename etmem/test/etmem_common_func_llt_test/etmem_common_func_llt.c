@@ -272,23 +272,37 @@ static void test_get_mem_from_proc_file_ok(void)
 
 static void test_get_swap_threshold_inKB_error(void)
 {
-    char *swap_threshold = "50m";
-    char *swap_threshold_too_long = "12345678900m";
+    char *swap_threshold = "50k";
+    char *swap_threshold_too_long = "12345678900k";
+    char *swap_threshold_01 = "g";
+    char *swap_threshold_02 = "5k";
+    char *swap_threshold_03 = "50";
+    char *swap_threshold_04 = "-10";
+    char *swap_threshold_05 = "5.5g";
     unsigned long value = 0;
 
     CU_ASSERT_EQUAL(get_swap_threshold_inKB(NULL, &value), -1);
     CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold, &value), -1);
     CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_too_long, &value), -1);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_01, &value), -1);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_02, &value), -1);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_03, &value), -1);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_04, &value), -1);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_05, &value), -1);
 }
 
 static void test_get_swap_threshold_inKB_ok(void)
 {
     char *swap_threshold = "50g";
     char *swap_threshold_G = "50G";
+    char *swap_threshold_m = "50m";
+    char *swap_threshold_M = "50M";
     unsigned long value = 0;
 
     CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold, &value), 0);
     CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_G, &value), 0);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_m, &value), 0);
+    CU_ASSERT_EQUAL(get_swap_threshold_inKB(swap_threshold_M, &value), 0);
 }
 
 static void test_etmemd_send_ioctl_cmd_error(void)

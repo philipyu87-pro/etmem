@@ -484,12 +484,13 @@ int get_swap_threshold_inKB(const char *string, unsigned long *value)
     int i;
     int ret = -1;
     char *swap_threshold_string = NULL;
-    unsigned long swap_threshold_inGB;
+    unsigned long swap_threshold;
 
     if (string == NULL || value == NULL) {
         goto out;
     }
 
+    *value = 0;
     len = strlen(string);
     if (len == 0 || len > SWAP_THRESHOLD_MAX_LEN) {
         etmemd_log(ETMEMD_LOG_ERR, "swap_threshold string is invalid.\n");
@@ -511,17 +512,31 @@ int get_swap_threshold_inKB(const char *string, unsigned long *value)
         goto free_out;
     }
 
-    if (string[i] != 'g' && string[i] != 'G') {
-        etmemd_log(ETMEMD_LOG_ERR, "the swap_threshold should in G or g.\n");
-        goto free_out;
+    /* check the swap_threshold capacity unit */
+    if (strchr("gGmM", string[i]) == NULL || strlen(swap_threshold_string) <= 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "the swap_threshold should in dig G/g/M/m\n");
+         goto free_out;
     }
-
-    if (get_unsigned_long_value(swap_threshold_string, &swap_threshold_inGB) != 0) {
+ 
+    if (get_unsigned_long_value(swap_threshold_string, &swap_threshold) != 0) {
         etmemd_log(ETMEMD_LOG_ERR, "get_unsigned_long_value swap_threshold faild.\n");
         goto free_out;
     }
 
-    *value = GB_TO_KB(swap_threshold_inGB);
+    switch (string[i]) {
+        case 'M':
+        case 'm':
+            *value = MB_TO_KB(swap_threshold);
+            break;
+        case 'g':
+        case 'G':
+            *value = GB_TO_KB(swap_threshold);
+            break;
+        default:
+            etmemd_log(ETMEMD_LOG_ERR, "the string is invalid.");
+            break;
+    }
+ 
     ret = 0;
 
 free_out:

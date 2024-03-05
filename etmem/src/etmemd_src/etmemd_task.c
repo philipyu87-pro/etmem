@@ -29,6 +29,13 @@
 #include "etmemd_engine.h"
 #include "etmemd_file.h"
 
+#define CONTAINER_ID_MAX_LEN            15
+#define ISULA_SEG_CNT_MAX               8
+#define ISULA_PID_SEG                   1
+
+#define ISULA_TOP_ERROR_INFO            "Error"
+#define ISULA_TOP_UID_INFO              "UID"
+
 static int get_pid_through_pipe(char *arg_pid[], const int *pipefd)
 {
     pid_t pid;
@@ -99,15 +106,44 @@ void free_task_pid_mem(struct task_pid **tk_pid)
     etmemd_safe_free((void **)tk_pid);
 }
 
+static void clean_nouse_task_child_pid(void *arg)
+{
+    struct task_child_pid_params **task_child_pid = (struct task_child_pid_params **)arg;
+    struct task_child_pid_params *tmp_pid = *task_child_pid;
+
+    while (*task_child_pid != NULL) {
+        tmp_pid = (*task_child_pid)->next;
+        etmemd_safe_free((void **)task_child_pid);
+        *task_child_pid = tmp_pid;
+    }
+}
+
 static void clean_nouse_pid(struct task_pid **tk_pid)
 {
     struct task_pid *tmp_pid = NULL;
 
     while (*tk_pid != NULL) {
         tmp_pid = (*tk_pid)->next;
+        clean_nouse_task_child_pid(&(*tk_pid)->params);
         free_task_pid_mem(tk_pid);
         *tk_pid = tmp_pid;
     }
+}
+
+static struct task_child_pid_params *alloc_task_child_pid_node(unsigned int pid, struct task_pid *tk_pid)
+{
+    struct task_child_pid_params *task_child_pid = NULL;
+
+    task_child_pid = (struct task_child_pid_params *)calloc(1, sizeof(struct task_child_pid_params));
+    if (task_child_pid == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc task_child_pid_params pid fail.\n");
+        return NULL;
+    }
+
+    task_child_pid->child_pid = pid;
+    task_child_pid->tpid = tk_pid;
+
+    return task_child_pid;
 }
 
 static struct task_pid *alloc_tkpid_node(unsigned int pid, struct task *tk)
@@ -129,6 +165,45 @@ static struct task_pid *alloc_tkpid_node(unsigned int pid, struct task *tk)
     }
 
     return tk_pid;
+}
+
+static struct task_child_pid_params **insert_isula_task_pids(unsigned int pid,
+                                                       struct task_child_pid_params **current_pid,
+                                                       struct task_pid *tk_pid)
+{
+    struct task_child_pid_params *task_child_pid = NULL;
+
+    task_child_pid = alloc_task_child_pid_node(pid, tk_pid);
+    if (task_child_pid == NULL) {
+        return NULL;
+    }
+
+    task_child_pid->next = *current_pid;
+    *current_pid = task_child_pid;
+    return &((*current_pid)->next);
+}
+
+static struct task_child_pid_params **update_isula_task_pids(unsigned int pid,
+                                                       struct task_child_pid_params **current_pid,
+                                                       struct task_pid *tk_pid)
+{
+    struct task_child_pid_params *tk_tmp = NULL;
+    if (*current_pid == NULL) {
+        return insert_isula_task_pids(pid, current_pid, tk_pid);
+    }
+
+    if (pid == (*current_pid)->child_pid) {
+        return &((*current_pid)->next);
+    }
+
+    if (pid > (*current_pid)->child_pid) {
+        tk_tmp = *current_pid;
+        *current_pid = (*current_pid)->next;
+        etmemd_safe_free((void **)&tk_tmp);
+        return update_isula_task_pids(pid, current_pid, tk_pid);
+    }
+
+    return insert_isula_task_pids(pid, current_pid, tk_pid);
 }
 
 static struct task_pid **insert_task_pids(unsigned int pid, struct task_pid **current_pid, struct task *tk)
@@ -175,8 +250,10 @@ static int fill_task_pid(struct task *tk, const char *val)
         return -1;
     }
 
-    if (tk->pids != NULL && tk->pids->pid == pid)
+    if (tk->pids != NULL && tk->pids->pid == pid) {
+        etmemd_log(ETMEMD_LOG_DEBUG, "child pid is correct. do not reinit.");
         return 0;
+    }
 
     clean_nouse_pid(&(tk->pids));
     tk_pid = alloc_tkpid_node(pid, tk);
@@ -351,12 +428,208 @@ void etmemd_free_task_pids(struct task *tk)
     }
 }
 
+static int get_isula_pid_value(char *line, unsigned int *pid)
+{
+    int i = 0;
+    char *seg[ISULA_SEG_CNT_MAX] = {0};
+    char *outptr = NULL;
+
+    while (i < ISULA_SEG_CNT_MAX && (seg[i] = strtok_r(line, " ", &outptr)) != NULL) {
+        i++;
+        line = NULL;
+    }
+
+    if (get_unsigned_int_value(seg[ISULA_PID_SEG], pid) != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "get pid from isula top failed. line: %s", line);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int read_fill_isula_pid_file(struct task *tk, FILE *file)
+{
+    struct task_child_pid_params **current_pid = (struct task_child_pid_params **)(&(tk->pids->params));
+    char line[FILE_LINE_MAX_LEN] = {0};
+    unsigned int pid;
+    int ret;
+
+    while (fgets(line, FILE_LINE_MAX_LEN, file) != NULL) {
+        if (strncmp(ISULA_TOP_ERROR_INFO, line, strlen(ISULA_TOP_ERROR_INFO)) == 0) {
+            etmemd_log(ETMEMD_LOG_DEBUG, "the container id is not right.");
+            return -1;
+        }
+
+        if (strncmp(ISULA_TOP_UID_INFO, line, strlen(ISULA_TOP_UID_INFO)) == 0) {
+            continue;
+        }
+
+        if (line[strlen(line) - 1] == '\n') {
+            line[strlen(line) - 1] = '\0';
+        }
+
+        ret = get_isula_pid_value(line, &pid);
+        if (ret != 0) {
+            return ret;
+        }
+
+        current_pid = update_isula_task_pids(pid, current_pid, tk->pids);
+        if (current_pid == NULL) {
+            return -1;
+        }
+    }
+
+    clean_nouse_task_child_pid(current_pid);
+    return 0;
+}
+
+static int fill_isula_task_pid(struct task *tk, char *container_id)
+{
+    char *arg_pid[] = {"/usr/bin/isula", "top", container_id, NULL};
+    FILE *file = NULL;
+    int ret;
+    int pipefd[PIPE_FD_LEN]; /* used for pipefd[PIPE_FD_LEN] communication to obtain the task PID */
+
+    if (pipe(pipefd) == -1) {
+        return -1;
+    }
+
+    ret = get_pid_through_pipe(arg_pid, pipefd);
+    if (ret != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "get pid through pipe failed.\n");
+        close(pipefd[1]);
+        goto err_out;
+    }
+
+    close(pipefd[1]);
+    file = fdopen(pipefd[0], "r");
+    if (file == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "fopen pipefd file fail.\n");
+        ret = -1;
+        goto err_out;
+    }
+
+    ret = read_fill_isula_pid_file(tk, file);
+    if (ret != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "get child pid through pipe file failed.\n");
+        fclose(file);
+        goto err_out;
+    }
+
+    fclose(file);
+    return ret;
+
+err_out:
+    close(pipefd[0]);
+    return ret;
+}
+
+static int check_isula_container_exists(FILE *file)
+{
+    char line[FILE_LINE_MAX_LEN] = {0};
+
+    if (fgets(line, FILE_LINE_MAX_LEN, file) != NULL) {
+        if (strncmp("true", line, 4) == 0) {
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+static int check_isula_process_exists(char *container_id)
+{
+   char *arg_pid[] = {"/usr/bin/isula", "inspect", "-f", "{{.State.Running}}", container_id, NULL};
+    FILE *file = NULL;
+    int ret;
+    int pipefd[PIPE_FD_LEN]; /* used for pipefd[PIPE_FD_LEN] communication to obtain the task PID */
+
+    if (pipe(pipefd) == -1) {
+        return -1;
+    }
+
+    ret = get_pid_through_pipe(arg_pid, pipefd);
+    if (ret != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "get pid through pipe failed.\n");
+        close(pipefd[1]);
+        goto err_out;
+    }
+
+    close(pipefd[1]);
+    file = fdopen(pipefd[0], "r");
+    if (file == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "fopen pipefd file fail.\n");
+        ret = -1;
+        goto err_out;
+    }
+
+    if (check_isula_container_exists(file) != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "the correspond container: %s is not started.\n", container_id);
+        ret = -1;
+        fclose(file);
+        goto err_out;
+    }
+
+    fclose(file);
+    return ret;
+
+err_out:
+    close(pipefd[0]);
+    return ret;
+}
+
+static int etmemd_get_task_pids_from_isula(struct task *tk)
+{
+    char container_id[CONTAINER_ID_MAX_LEN] = {0};
+    struct task_pid *tk_pid = NULL;
+
+    if (strncpy_s(container_id, CONTAINER_ID_MAX_LEN, tk->value, strlen(tk->value)) != EOK) {
+        etmemd_log(ETMEMD_LOG_WARN, "strncpy_s for %s fail.\n", tk->value);
+        return -1;
+    }
+
+    /* delete all the task from last Scanning Period
+     * bacase isulad task can be dynamic born and die. */
+    if (tk->pids != NULL && tk->pids->params != NULL) {
+        clean_nouse_task_child_pid(&(tk->pids->params));
+    }
+
+    etmemd_log(ETMEMD_LOG_DEBUG, "isula type  for %s \n", tk->value);
+    clean_nouse_pid(&(tk->pids));
+
+    if (check_isula_process_exists(container_id) != 0) {
+        return -1;
+    }
+
+    tk_pid = (struct task_pid *)calloc(1, sizeof(struct task_pid));
+    if (tk_pid == NULL) {
+        etmemd_log(ETMEMD_LOG_WARN, "malloc task pid fail.\n");
+        return -1;
+    }
+    tk_pid->tk = tk;
+    tk->pids = tk_pid;
+
+    /* then fill the isula task pids according to the  container_id */
+    if (fill_isula_task_pid(tk, container_id) != 0) {
+        etmemd_free_task_pids(tk);
+        etmemd_log(ETMEMD_LOG_WARN, "get isula child pids fail\n");
+        return -1;
+    }
+
+    return 0;
+}
+
 int etmemd_get_task_pids(struct task *tk, bool recursive)
 {
     char pid[PID_STR_MAX_LEN] = {0};
 
+    if (strcmp(tk->type, "isula") == 0 && tk->eng->engine_type == SLIDE_ENGINE) {
+        return etmemd_get_task_pids_from_isula(tk);
+    }
+
     /* get the pid of target first */
     if (get_pid_from_task_type(tk, pid) != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "the config file task type is invalid.\n");
         return -1;
     }
 
@@ -437,8 +710,8 @@ static int fill_task_type(void *obj, void *val)
 {
     struct task *tk = (struct task *)obj;
     char *type = (char *)val;
-    if (strcmp(val, "pid") != 0 && strcmp(val, "name") != 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "invalid task type, must be pid or name.\n");
+    if (strcmp(val, "pid") != 0 && strcmp(val, "name") != 0 && strcmp(val, "isula") != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "invalid task type, must be pid or name or isula.\n");
         free(val);
         return -1;
     }

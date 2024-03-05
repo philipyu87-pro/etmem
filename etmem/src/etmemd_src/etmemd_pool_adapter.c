@@ -37,6 +37,8 @@ static void push_ctrl_workflow(struct task_pid **tk_pid, void *(*exector)(void *
 
         tk_pid = &((*tk_pid)->next);
     }
+    etmemd_log(ETMEMD_LOG_DEBUG, "Task_value %s, project_name %s >\n",
+                        tk->value, tk->eng->proj->name);
     return;
 }
 

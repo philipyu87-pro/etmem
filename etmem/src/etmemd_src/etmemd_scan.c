@@ -120,18 +120,6 @@ void free_vmas(struct vmas *vmas)
     free(vmas);
 }
 
-static void clean_vmas_resource_unexpected(void *arg)
-{
-    struct vmas **vmas = (struct vmas **)arg;
-
-    if (*vmas == NULL) {
-        return;
-    }
-
-    free_vmas(*vmas);
-    *vmas = NULL;
-}
-
 static bool parse_vma_seg0(struct vma *vma, const char *seg0)
 {
     int ret;
@@ -768,33 +756,48 @@ void etmemd_free_page_refs(struct page_refs *pf)
     }
 }
 
-struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task *tk)
+static void etmemd_free_task_vmas(const struct task_pid *tk_pid)
+{
+    struct task_child_pid_params *task_child_pid = NULL;
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        etmemd_free_vmas(task_child_pid->vmas);
+        task_child_pid = task_child_pid->next;
+    }
+}
+
+int etmemd_do_scan(const struct task_pid *tk_pid)
 {
     int i;
-    struct vmas *vmas = NULL;
-    struct page_refs *page_refs = NULL;
     int ret;
     char pid[PID_STR_MAX_LEN] = {0};
     struct ioctl_para ioctl_para = {0};
+    struct task_child_pid_params *task_child_pid = NULL;
+    struct task *tk = NULL;
 
-    if (tk == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "task struct is null for pid %u\n", tpid->pid);
-        return NULL;
+    if (tk_pid == NULL || tk_pid->tk == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "etmem do scan failed. task struct is null. Please check. \n");
+        return -1;
     }
 
-    struct page_scan *page_scan = (struct page_scan *)tk->eng->proj->scan_param;
+    tk = tk_pid->tk;
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        if (snprintf_s(pid, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", task_child_pid->child_pid) <= 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", task_child_pid->child_pid);
+            ret = -1;
+            goto free_out;
+        }
 
-    if (snprintf_s(pid, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", tpid->pid) <= 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", tpid->pid);
-        return NULL;
-    }
+        /* get vmas of target pid first. */
+        task_child_pid->vmas = get_vmas(pid);
+        if (task_child_pid->vmas == NULL) {
+            etmemd_log(ETMEMD_LOG_ERR, "get vmas for %s fail\n", pid);
+            ret = -1;
+            goto free_out;
+        }
 
-    pthread_cleanup_push(clean_vmas_resource_unexpected, &vmas);
-    /* get vmas of target pid first. */
-    vmas = get_vmas(pid);
-    if (vmas == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "get vmas for %s fail\n", pid);
-        return NULL;
+        task_child_pid = task_child_pid->next;
     }
 
     ioctl_para.ioctl_cmd = VMA_SCAN_ADD_FLAGS;
@@ -803,23 +806,34 @@ struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task 
     }
 
     /* loop for scanning idle_pages to get result of memory access. */
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    struct page_scan *page_scan = (struct page_scan *)tk->eng->proj->scan_param;
     for (i = 0; i < page_scan->loop; i++) {
-        ret = get_page_refs(vmas, pid, &page_refs, NULL, &ioctl_para);
-        if (ret != 0) {
-            etmemd_log(ETMEMD_LOG_ERR, "scan operation failed\n");
-            /* free page_refs nodes already exist */
-            etmemd_free_page_refs(page_refs);
-            page_refs = NULL;
-            break;
+        while (task_child_pid != NULL) {
+            if (snprintf_s(pid, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", task_child_pid->child_pid) <= 0) {
+                etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", task_child_pid->child_pid);
+                ret = -1;
+                goto free_out;
+            }
+
+            ret = get_page_refs(task_child_pid->vmas, pid, &task_child_pid->page_refs, NULL, &ioctl_para);
+            if (ret != 0) {
+                etmemd_log(ETMEMD_LOG_ERR, "scan operation failed\n");
+                ret = -1;
+                goto free_out;
+            }
+
+            task_child_pid = task_child_pid->next;
         }
         (void)pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
         sleep((unsigned)page_scan->sleep);
         (void)pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
     }
+    ret = 0;
 
-    pthread_cleanup_pop(1);
-
-    return page_refs;
+free_out:
+    etmemd_free_task_vmas(tk_pid);
+    return ret;
 }
 
 void etmemd_free_vmas(struct vmas *vmas)
@@ -863,16 +877,17 @@ void clean_page_sort_unexpected(void *arg)
         clean_page_refs_unexpected(&((*msg)->page_refs_sort)[i]);
     }
 
+    free((*msg)->page_refs_sort);
     free(*msg);
     *msg = NULL;
 
     return;
 }
 
-struct page_sort *alloc_page_sort(const struct task_pid *tpid)
+struct page_sort *alloc_page_sort(const struct task_pid *tk_pid)
 {
     struct page_sort *page_sort = NULL;
-    struct page_scan *page_scan = (struct page_scan *)tpid->tk->eng->proj->scan_param;
+    struct page_scan *page_scan = (struct page_scan *)tk_pid->tk->eng->proj->scan_param;
 
     page_sort = (struct page_sort *)calloc(1, sizeof(struct page_sort));
     if (page_sort == NULL) {
@@ -925,37 +940,37 @@ void etmemd_scan_exit(void)
     g_exp_scan_inited = false;
 }
 
-/* Move the colder pages by sorting page refs.
- * Use original page_refs if dram_percent is not set.
- * But, use the sorting result of page_refs, if dram_percent is set to (0, 100] */
-struct page_sort *sort_page_refs(struct page_refs **page_refs, const struct task_pid *tpid)
+/* Move the colder pages by sorting page refs. */
+int sort_page_refs(struct task_pid *tk_pid)
 {
-    struct slide_params *slide_params = NULL;
-    struct page_sort *page_sort = NULL;
+    struct task_child_pid_params *task_child_pid = NULL;
     struct page_refs *page_next = NULL;
+    struct page_refs **pid_page_refs = NULL;
+    struct page_sort **pid_page_sort = NULL;
 
-    page_sort = alloc_page_sort(tpid);
-    if (page_sort == NULL)
-        return NULL;
-
-    slide_params = (struct slide_params *)tpid->tk->params;
-    if (slide_params == NULL || slide_params->dram_percent == 0) {
-        page_sort->page_refs = page_refs;
-        return page_sort;
+    if (tk_pid == NULL || tk_pid->params == NULL) {
+        etmemd_log(ETMEMD_LOG_WARN, "there is no page_refs need to be sorted.");
+        return -1;
     }
 
-    while (*page_refs != NULL) {
-        int count = (*page_refs)->count;
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        task_child_pid->page_sort = alloc_page_sort(tk_pid);
+        if (task_child_pid->page_sort == NULL)
+            return -1;
 
-#ifdef ENABLE_PMU
-        count = limit_count_to_loop(count, \
-            ((struct page_scan *)tpid->tk->eng->proj->scan_param)->loop);
-#endif
-        page_next = (*page_refs)->next;
-        (*page_refs)->next = (page_sort->page_refs_sort[count]);
-        (page_sort->page_refs_sort[count]) = *page_refs;
-        *page_refs = page_next;
+        pid_page_sort = &(task_child_pid->page_sort);
+        pid_page_refs = &(task_child_pid->page_refs);
+
+        while (*pid_page_refs != NULL) {
+            page_next = (*pid_page_refs)->next;
+            (*pid_page_refs)->next = ((*pid_page_sort)->page_refs_sort[(*pid_page_refs)->count]);
+            ((*pid_page_sort)->page_refs_sort[(*pid_page_refs)->count]) = *pid_page_refs;
+            *pid_page_refs = page_next;
+        }
+
+        task_child_pid = task_child_pid->next;
     }
 
-    return page_sort;
+    return 0;
 }

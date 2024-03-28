@@ -192,6 +192,7 @@ void init_slide_task(struct slide_task_test_param *param)
     param->T = "1";
     param->swap_flag = NULL;
     param->swap_threshold = NULL;
+    param->dram_percent = NULL;
 }
 
 void add_slide_task(struct slide_task_test_param *param)
@@ -212,6 +213,9 @@ void add_slide_task(struct slide_task_test_param *param)
     }
     if (param->swap_threshold != NULL) {
         CU_ASSERT_NOT_EQUAL(fprintf(file, CONFIG_SWAP_THRESHOLD, param->swap_threshold), -1);
+    }
+    if (param->dram_percent != NULL) {
+        CU_ASSERT_NOT_EQUAL(fprintf(file, CONFIG_DRAM_PERCENT, param->dram_percent), -1);
     }
     fclose(file);
 }

@@ -25,6 +25,8 @@ SET(EXE etmem_slide_ops_llt)
 
 add_executable(${EXE} etmem_slide_ops_llt.c)
 add_executable(mem_swaptest mem_swaptest.c)
+add_executable(mem_1g mem_1g.c)
 
 target_link_libraries(${EXE} cunit ${BUILD_DIR}/lib/libetmemd.so ${BUILD_DIR}/lib/libtest.so pthread dl rt boundscheck numa ${GLIB2_LIBRARIES})
 target_link_libraries(mem_swaptest pthread dl rt boundscheck)
+target_link_libraries(mem_1g dl rt securec)

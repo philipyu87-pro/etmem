@@ -44,6 +44,7 @@
 #define CONFIG_T                            "T=%s\n"
 #define CONFIG_SWAP_FLAG                    "swap_flag=%s\n"
 #define CONFIG_SWAP_THRESHOLD               "swap_threshold=%s\n"
+#define CONFIG_DRAM_PERCENT                 "dram_percent=%s\n"
 
 #define CONFIG_NODE_PAIR                    "node_pair=%s\n"
 #define CONFIG_THRESH                       "hot_threshold=%s\n"
@@ -92,6 +93,7 @@ struct slide_task_test_param {
     const char *T;
     const char *swap_flag;
     const char *swap_threshold;
+    const char *dram_percent;
 };
 
 struct cslide_eng_test_param {

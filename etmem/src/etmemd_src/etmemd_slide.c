@@ -29,83 +29,211 @@
 #include "etmemd_pool_adapter.h"
 #include "etmemd_file.h"
 
-static struct memory_grade *slide_policy_interface(struct page_sort **page_sort, const struct task_pid *tpid)
+#define MAX_DRAM_PERCENT_VALUE      100
+
+static int get_task_memory_info(const struct task_pid *tk_pid, unsigned long *tk_vmrss, unsigned long *tk_vmswap)
 {
-    struct slide_params *slide_params = (struct slide_params *)(tpid->tk->params);
-    struct page_refs **page_refs = NULL;
-    struct memory_grade *memory_grade = NULL;
-    unsigned long need_2_swap_num;
-    volatile uint64_t count = 0;
-    struct page_scan *page_scan = (struct page_scan *)tpid->tk->eng->proj->scan_param;
+    struct task_child_pid_params *task_child_pid = NULL;
+    char pid_str[PID_STR_MAX_LEN] = {0};
+    unsigned long vm_rss;
+    unsigned long vm_swap;
+    int ret = -1;
 
-    if (slide_params == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "cannot get params for slide\n");
-        return NULL;
-    }
-
-    memory_grade = (struct memory_grade *)calloc(1, sizeof(struct memory_grade));
-    if (memory_grade == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "malloc for memory grade fail\n");
-        return NULL;
-    }
-
-    if (slide_params->dram_percent == 0) {
-        page_refs = (*page_sort)->page_refs;
-
-        while (*page_refs != NULL) {
-            if ((*page_refs)->count >= slide_params->t) {
-                *page_refs = add_page_refs_into_memory_grade(*page_refs, &memory_grade->hot_pages);
-                continue;
-            }
-            *page_refs = add_page_refs_into_memory_grade(*page_refs, &memory_grade->cold_pages);
+    *tk_vmrss = 0;
+    *tk_vmswap = 0;
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        if (snprintf_s(pid_str, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", task_child_pid->child_pid) <= 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", task_child_pid->child_pid);
+            return -1;
         }
 
-        return memory_grade;
+        ret = get_mem_from_proc_file(pid_str, STATUS_FILE, &vm_rss, VMRSS);
+        if (ret != 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "get vmrss %s fail", pid_str);
+            return -1;
+        }
+
+        ret = get_mem_from_proc_file(pid_str, STATUS_FILE, &vm_swap, VMSWAP);
+        if (ret != 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "get swapout %s fail", pid_str);
+            return -1;
+        }
+
+        *tk_vmswap += vm_swap;
+        *tk_vmrss += vm_rss;
+        task_child_pid = task_child_pid->next;
     }
 
-    need_2_swap_num = check_should_migrate(tpid);
-    if (need_2_swap_num == 0)
-        goto count_out;
+    return 0;
+}
 
-    for (int i = 0; i < page_scan->loop + 1; i++) {
-        page_refs = &((*page_sort)->page_refs_sort[i]);
+static int check_should_migrate(const struct task_pid *tk_pid, unsigned long *need_2_swap_num)
+{
+    unsigned long tk_vmrss = 0;
+    unsigned long tk_vmswap = 0;
+    unsigned long vm_cmp;
+    struct slide_params *slide_params = NULL;
+    unsigned long need_to_swap_page_num = 0;
+    unsigned long need_to_swap_rss = 0;
+    unsigned long pagesize = 0;
 
-        while (*page_refs != NULL) {
-            if ((*page_refs)->count >= slide_params->t) {
-                *page_refs = add_page_refs_into_memory_grade(*page_refs, &memory_grade->hot_pages);
-                goto count_out;
-            }
+    if (tk_pid == NULL || tk_pid->params == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "tk_pid is empty. nothing to swap.\n");
+        return -1;
+    }
 
-            *page_refs = add_page_refs_into_memory_grade(*page_refs, &memory_grade->cold_pages);
-            count++;
-            if (count >= need_2_swap_num)
-                goto count_out;
+    if (get_task_memory_info(tk_pid, &tk_vmrss, &tk_vmswap) != 0) {
+        return -1;
+    }
+
+    slide_params = (struct slide_params *)tk_pid->tk->params;
+    if (slide_params == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "slide params is null");
+        return -1;
+    }
+
+    if (slide_params->swap_threshold != 0) {
+        need_to_swap_rss = tk_vmrss > slide_params->swap_threshold ? (tk_vmrss - slide_params->swap_threshold) : 0;
+        goto out;
+    }
+
+    if (slide_params->dram_percent != 0) {
+        /* Calculates the percentage of processes that can be retained in memory DRAM. */
+        vm_cmp = (tk_vmrss + tk_vmswap) / 100 * slide_params->dram_percent;
+        need_to_swap_rss = tk_vmrss > vm_cmp ? (tk_vmrss - vm_cmp) : 0;
+    }
+
+out:
+    pagesize = get_pagesize();
+    need_to_swap_page_num = KB_TO_BYTE(need_to_swap_rss) / pagesize;
+    *need_2_swap_num = need_to_swap_page_num;
+
+    return 0;
+}
+
+static int slide_alloc_pid_memory_grade(struct task_pid *tk_pid)
+{
+    struct task_child_pid_params *task_child_pid = (struct task_child_pid_params *)(tk_pid->params);;
+    if (task_child_pid == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "task child pid is empty.\n ");
+        return -1;
+    }
+
+    while (task_child_pid != NULL) {
+        task_child_pid->memory_grade = (struct memory_grade *)calloc(1, sizeof(struct memory_grade));
+        if (task_child_pid->memory_grade == NULL) {
+            etmemd_log(ETMEMD_LOG_ERR, "alloc memory grade for task child pid failed. no memory\n");
+            return -1;
+        }
+
+        task_child_pid = task_child_pid->next;
+    }
+
+    return 0;
+}
+
+static unsigned long slide_get_memory_grade(struct task_child_pid_params *task_child_pid,
+                                            unsigned long need_2_swap_num, int page_sort_index)
+{
+    struct page_refs **page_refs = NULL;
+    struct memory_grade **memory_grade = NULL;
+    struct page_sort **page_sort = NULL;
+    struct slide_params *slide_params = (struct slide_params *)(task_child_pid->tpid->tk->params);
+    unsigned long count = 0;
+
+    page_sort = &task_child_pid->page_sort;
+    memory_grade = &task_child_pid->memory_grade;
+    page_refs = &((*page_sort)->page_refs_sort[page_sort_index]);
+
+    while (*page_refs != NULL) {
+        if ((*page_refs)->count >= slide_params->t) {
+            *page_refs = add_page_refs_into_memory_grade(*page_refs, &(*memory_grade)->hot_pages);
+            continue;
+        }
+
+        *page_refs = add_page_refs_into_memory_grade(*page_refs, &(*memory_grade)->cold_pages);
+        count++;
+        if (count >= need_2_swap_num) {
+            goto count_out;
         }
     }
 
 count_out:
-    return memory_grade;
+    return count;
 }
 
-static int slide_do_migrate(unsigned int pid, const struct memory_grade *memory_grade)
+static void slide_memory_grade_policy(struct task_pid *tk_pid, unsigned long need_2_swap_num)
 {
-    int ret;
-    char pid_str[PID_STR_MAX_LEN] = {0};
+    struct task_child_pid_params *task_child_pid = NULL;
 
-    if (memory_grade == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "memory grade for slide should not be NULL for pid %u\n", pid);
-        return -1;
+    struct page_scan *page_scan = (struct page_scan *)tk_pid->tk->eng->proj->scan_param;
+    for (int i = 0; i < page_scan->loop + 1; i++) {
+        task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+
+        while (task_child_pid != NULL) {
+            need_2_swap_num -= slide_get_memory_grade(task_child_pid, need_2_swap_num, i);
+            if (need_2_swap_num == 0) {
+                break;
+            }
+
+            task_child_pid = task_child_pid->next;
+        }
     }
-
-    if (snprintf_s(pid_str, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", pid) <= 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", pid);
-        return -1;
-    }
-
-    /* we swap the cold pages for temporary, and do other operations later */
-    ret = etmemd_grade_migrate(pid_str, memory_grade);
-    return ret;
 }
+
+static int slide_policy_interface(struct task_pid *tk_pid)
+{
+    struct slide_params *slide_params = (struct slide_params *)(tk_pid->tk->params);
+    unsigned long need_2_swap_num = 0;
+
+    if (slide_alloc_pid_memory_grade(tk_pid) != 0) {
+        return -1;
+    }
+
+    if (slide_params->dram_percent == 0 && slide_params->swap_threshold == 0) {
+        need_2_swap_num = ULONG_MAX;
+    } else if (check_should_migrate(tk_pid, &need_2_swap_num) != 0) {
+        return -1;
+    }
+
+    if (need_2_swap_num == 0) {
+        return 0;
+    }
+
+    slide_memory_grade_policy(tk_pid, need_2_swap_num);
+
+    return 0;
+}
+
+static int slide_do_migrate(struct task_pid *tk_pid)
+{
+    char pid_str[PID_STR_MAX_LEN] = {0};
+    struct task_child_pid_params *task_child_pid = NULL;
+
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        if (task_child_pid->memory_grade == NULL) {
+            task_child_pid = task_child_pid->next;
+            continue;
+        }
+
+        if (snprintf_s(pid_str, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", task_child_pid->child_pid) <= 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", task_child_pid->child_pid);
+            return -1;
+        }
+
+        /* we swap the cold pages for temporary, and do other operations later */
+        if (etmemd_grade_migrate(pid_str, task_child_pid->memory_grade) != 0) {
+            return -1;
+        }
+
+        task_child_pid = task_child_pid->next;
+    }
+
+    return 0;
+}
+
 
 static int check_sysmem_lower_threshold(struct task_pid *tk_pid)
 {
@@ -135,23 +263,37 @@ static int check_sysmem_lower_threshold(struct task_pid *tk_pid)
     return DONT_SWAP;
 }
 
-static int check_pid_should_swap(const char *pid, unsigned long vmrss, const struct task_pid *tk_pid)
+static int check_pid_should_swap(unsigned long tk_vmrss, const struct task_pid *tk_pid)
 {
     unsigned long vmswap;
     unsigned long vmcmp;
+    unsigned long tk_vmswap = 0;
+    struct task_child_pid_params *task_child_pid = NULL;
     int ret;
+    char pid_str[PID_STR_MAX_LEN] = {0};
 
-    ret = get_mem_from_proc_file(pid, STATUS_FILE, &vmswap, "VmSwap");
-    if (ret != 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "get VmSwap fail\n");
-        return DONT_SWAP;
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        if (snprintf_s(pid_str, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", task_child_pid->child_pid) <= 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", task_child_pid->child_pid);
+            return DONT_SWAP;
+        }
+
+        ret = get_mem_from_proc_file(pid_str, STATUS_FILE, &vmswap, "VmSwap");
+        if (ret != 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "get VmSwap fail\n");
+            return DONT_SWAP;
+        }
+
+        tk_vmswap += vmswap;
+        task_child_pid = task_child_pid->next;
     }
 
     /* Calculate the total amount of memory that can be swappout for the current process
      * and check whether the memory is larger than the current swapout amount.
      * If true, continue swap-out; otherwise, abort the swap-out process. */
-    vmcmp = (vmrss + vmswap) / 100 * tk_pid->tk->eng->proj->sysmem_threshold;
-    if (vmcmp > vmswap) {
+    vmcmp = (tk_vmrss + tk_vmswap) / 100 * tk_pid->tk->eng->proj->sysmem_threshold;
+    if (vmcmp > tk_vmswap) {
         return DO_SWAP;
     }
 
@@ -161,31 +303,39 @@ static int check_pid_should_swap(const char *pid, unsigned long vmrss, const str
 static int check_pidmem_lower_threshold(struct task_pid *tk_pid)
 {
     struct slide_params *params = NULL;
+    struct task_child_pid_params *task_child_pid = NULL;
+    unsigned long tk_vmrss = 0;
     unsigned long vmrss;
     int ret;
     char pid_str[PID_STR_MAX_LEN] = {0};
 
     params = (struct slide_params *)tk_pid->tk->params;
     if (params == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "tk_pid params is null. please check.\n");
         return DONT_SWAP;
     }
 
-    if (snprintf_s(pid_str, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", tk_pid->pid) <= 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", tk_pid->pid);
-        return DONT_SWAP;
-    }
+    task_child_pid = (struct task_child_pid_params *)(tk_pid->params);
+    while (task_child_pid != NULL) {
+        if (snprintf_s(pid_str, PID_STR_MAX_LEN, PID_STR_MAX_LEN - 1, "%u", task_child_pid->child_pid) <= 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "snprintf pid fail %u", task_child_pid->child_pid);
+            return DONT_SWAP;
+        }
 
-    ret = get_mem_from_proc_file(pid_str, STATUS_FILE, &vmrss, "VmRSS");
-    if (ret != 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "get VmRSS fail\n");
-        return DONT_SWAP;
+        ret = get_mem_from_proc_file(pid_str, STATUS_FILE, &vmrss, "VmRSS");
+        if (ret != 0) {
+            etmemd_log(ETMEMD_LOG_ERR, "get VmRSS fail\n");
+            return DONT_SWAP;
+        }
+        tk_vmrss += vmrss;
+        task_child_pid = task_child_pid->next;
     }
 
     if (params->swap_threshold == 0) {
-        return check_pid_should_swap(pid_str, vmrss, tk_pid);
+        return check_pid_should_swap(tk_vmrss, tk_pid);
     }
 
-    if (vmrss > params->swap_threshold) {
+    if (tk_vmrss > params->swap_threshold) {
         return DO_SWAP;
     }
 
@@ -194,6 +344,11 @@ static int check_pidmem_lower_threshold(struct task_pid *tk_pid)
 
 static int check_should_swap(struct task_pid *tk_pid)
 {
+    if (tk_pid == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "tk_pid is null, please check.\n");
+        return DONT_SWAP;
+    }
+
     if (tk_pid->tk->eng->proj->sysmem_threshold == -1) {
         return DO_SWAP;
     }
@@ -205,12 +360,30 @@ static int check_should_swap(struct task_pid *tk_pid)
     return check_pidmem_lower_threshold(tk_pid);
 }
 
+static void clean_memory_resource_unexpected(void *arg)
+{
+    struct task_pid **tk_pid = (struct task_pid **)arg;
+    struct task_child_pid_params *task_child_pid = NULL;
+    struct task_child_pid_params *tmp_pid = NULL;
+    if (*tk_pid == NULL) {
+        return;
+    }
+
+    task_child_pid = (struct task_child_pid_params *)((*tk_pid)->params);
+    while (task_child_pid != NULL) {
+        tmp_pid = task_child_pid->next;
+        clean_page_refs_unexpected(&task_child_pid->page_refs);
+        clean_page_sort_unexpected(&task_child_pid->page_sort);
+        clean_memory_grade_unexpected(&task_child_pid->memory_grade);
+        task_child_pid = tmp_pid;
+    }
+}
+
 static void *slide_executor(void *arg)
 {
     struct task_pid *tk_pid = (struct task_pid *)arg;
-    struct page_refs *page_refs = NULL;
-    struct memory_grade *memory_grade = NULL;
-    struct page_sort *page_sort = NULL;
+
+    etmemd_log(ETMEMD_LOG_DEBUG, "slide executor start, type: %s pid: %s tk_pid: %u", tk_pid->tk->type, tk_pid->tk->value, tk_pid->pid);
 
     /* The pthread_setcancelstate interface returns an error only when the
      * input parameter state is invalid, no need to check return value.
@@ -218,47 +391,27 @@ static void *slide_executor(void *arg)
     (void)pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
 
     /* register cleanup function in case of unexpected cancellation detected */
-    pthread_cleanup_push(clean_page_refs_unexpected, &page_refs);
+    pthread_cleanup_push(clean_memory_resource_unexpected, &tk_pid);
 
     if (check_should_swap(tk_pid) == DONT_SWAP) {
-        goto scan_out;
-    }
-
-#ifdef ENABLE_PMU
-    if (((struct slide_params *)tk_pid->tk->params)->pmu_params == NULL) {
-        page_refs = etmemd_do_scan(tk_pid, tk_pid->tk);
-    } else {
-        page_refs = etmemd_do_sample(tk_pid, tk_pid->tk);
-    }
-#else
-    page_refs = etmemd_do_scan(tk_pid, tk_pid->tk);
-#endif
-    if (page_refs == NULL) {
-        etmemd_log(ETMEMD_LOG_WARN, "pid %u cannot get page refs\n", tk_pid->pid);
-        goto scan_out;
-    }
-
-    page_sort = sort_page_refs(&page_refs, tk_pid);
-    if (page_sort == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "failed to alloc memory for page sort.", tk_pid->pid);
-        goto scan_out;
-    }
-
-    memory_grade = slide_policy_interface(&page_sort, tk_pid);
-
-scan_out:
-#ifndef ENABLE_PMU
-    clean_page_sort_unexpected(&page_sort);
-#endif
-
-    pthread_cleanup_pop(1);
-
-    if (memory_grade == NULL) {
-        etmemd_log(ETMEMD_LOG_DEBUG, "pid %u memory grade is empty\n", tk_pid->pid);
         goto exit;
     }
 
-    if (slide_do_migrate(tk_pid->pid, memory_grade) != 0) {
+    if (etmemd_do_scan(tk_pid) != 0) {
+        etmemd_log(ETMEMD_LOG_WARN, "pid %s cannot get page refs\n", tk_pid->tk->value);
+        goto exit;
+    }
+
+    if (sort_page_refs(tk_pid) != 0) {
+        etmemd_log(ETMEMD_LOG_ERR, "failed to do page refs sort %s. \n", tk_pid->tk->value);
+        goto exit;
+    }
+
+    if (slide_policy_interface(tk_pid) != 0) {
+        goto exit;
+    }
+
+    if (slide_do_migrate(tk_pid) != 0) {
         etmemd_log(ETMEMD_LOG_DEBUG, "slide migrate for pid %u fail\n", tk_pid->pid);
     }
 
@@ -267,15 +420,11 @@ scan_out:
     }
 
 exit:
-#ifdef ENABLE_PMU
-    if (((struct slide_params *)tk_pid->tk->params)->pmu_params != NULL) {
-        merge_page_refs(tk_pid, &page_sort, &memory_grade);
-    }
-#endif
-    clean_memory_grade_unexpected(&memory_grade);
+    /* clean up memory resoure */
+    pthread_cleanup_pop(1);
 
     if (malloc_trim(0) == 0) {
-        etmemd_log(ETMEMD_LOG_INFO, "malloc_trim to release memory for pid %u fail\n", tk_pid->pid);
+        etmemd_log(ETMEMD_LOG_DEBUG, "malloc_trim to release memory for pid %u fail\n", tk_pid->pid);
     }
 
     (void)pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
@@ -288,7 +437,6 @@ static int fill_task_threshold(void *obj, void *val)
 {
     struct slide_params *params = (struct slide_params *)obj;
     int t = parse_to_int(val);
-
     if (t < 0) {
         etmemd_log(ETMEMD_LOG_ERR, "slide engine param T should not be less than 0");
         return -1;
@@ -302,12 +450,10 @@ static int fill_task_dram_percent(void *obj, void *val)
 {
     struct slide_params *params = (struct slide_params *)obj;
     int value = parse_to_int(val);
-
-    if (value <= 0 || value > 100) {
-        etmemd_log(ETMEMD_LOG_WARN,
-                    "dram_percent %d is abnormal, the reasonable range is (0, 100],\
-                        cancle the dram_percent parameter of current task\n", value);
-        value = 0;
+    if (value <= 0 || value > MAX_DRAM_PERCENT_VALUE) {
+        etmemd_log(ETMEMD_LOG_ERR,
+                   "dram_percent %d is abnormal, the reasonable range is (0, 100]\n", value);
+        return -1;
     }
 
     params->dram_percent = value;
@@ -441,6 +587,7 @@ static int slide_fill_task(GKeyFile *config, struct task *tk)
         goto free_params;
     }
     tk->params = params;
+
     return 0;
 
 free_params:
@@ -493,6 +640,36 @@ static void slide_stop_task(struct engine *eng, struct task *tk)
     params->executor = NULL;
 }
 
+static int slide_alloc_pid_params(struct engine *eng, struct task_pid **tk_pid)
+{
+    unsigned pid = (*tk_pid)->pid;
+    struct task_child_pid_params *task_child_pid = NULL;
+
+    task_child_pid = (struct task_child_pid_params *)calloc(1, sizeof(struct task_child_pid_params));
+    if (task_child_pid == NULL) {
+        etmemd_log(ETMEMD_LOG_ERR, "malloc task_child_pid_params pid fail.\n");
+        return -1;
+    }
+
+    task_child_pid->child_pid = pid;
+    task_child_pid->tpid = *tk_pid;
+    (*tk_pid)->params = (void *)task_child_pid;
+
+    return 0;
+}
+
+static void slide_free_pid_params(struct engine *eng, struct task_pid **tk_pid)
+{
+    struct task_child_pid_params *task_child_pid = (struct task_child_pid_params *)((*tk_pid)->params);
+    struct task_child_pid_params *tmp_pid = NULL;
+
+    while (task_child_pid != NULL) {
+        tmp_pid = task_child_pid->next;
+        etmemd_safe_free((void **)&task_child_pid);
+        task_child_pid = tmp_pid;
+    }
+}
+
 struct engine_ops g_slide_eng_ops = {
     .fill_eng_params = NULL,
     .clear_eng_params = NULL,
@@ -500,8 +677,8 @@ struct engine_ops g_slide_eng_ops = {
     .clear_task_params = slide_clear_task,
     .start_task = slide_start_task,
     .stop_task = slide_stop_task,
-    .alloc_pid_params = NULL,
-    .free_pid_params = NULL,
+    .alloc_pid_params = slide_alloc_pid_params,
+    .free_pid_params = slide_free_pid_params,
     .eng_mgt_func = NULL,
 };
 

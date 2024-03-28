@@ -86,6 +86,9 @@ function add_project()
             echo "swap_threshold=1g" >> $task_configfile
             echo "swap_flag=yes" >> $task_configfile
         fi
+        if [ $i = 'dram_percent_test' ];then
+            echo "dram_percent=50" >> $task_configfile
+        fi
         ./bin/etmem obj add -f ${task_configfile} -s sock_slide_name
     done
 }
@@ -179,8 +182,10 @@ pre_test()
     fi
     rm -f $project_configfile
     cp ./bin/mem_swaptest ./bin/sysmem_swaptest
+    cp ./bin/mem_swaptest ./bin/dram_percent_test
     ./bin/mem_swaptest &
     ./bin/sysmem_swaptest &
+    ./bin/dram_percent_test &
 }
 
 do_test()
@@ -189,7 +194,7 @@ do_test()
     ./bin/etmemd -l 0 -s sock_slide_name >etmemd.log 2>&1 &
     sleep 1
 
-    add_project $1 $2 &
+    add_project $1 $2 $3 &
     pidadd_project=$!
     wait ${pidadd_project}
 
@@ -209,11 +214,14 @@ post_test()
     echo ${pid_swap_test}
     pid_sysmem_swaptest=`pidof sysmem_swaptest`
     echo ${pid_sysmem_swaptest}
+    pid_dram_percent_test=`pidof dram_percent_test`
+    echo ${pid_dram_percent_test}
     mem_vmswap=$(cat /proc/${pid_swap_test}/status |grep VmSwap |awk '{print $2}')
     echo ${mem_vmswap}
 
     kill -9 ${pid_swap_test}
     kill -9 ${pid_sysmem_swaptest}
+    kill -9 ${pid_dram_percent_test}
 
     echo "now to recover env"
     rm -f ${config_file_bak}
@@ -310,7 +318,7 @@ rand_pro_Str
 rand_sock_Str
 cmd_test
 pre_test
-do_test mem_swaptest sysmem_swaptest
+do_test mem_swaptest sysmem_swaptest dram_percent_test
 post_test
 
 test_sig_pipe

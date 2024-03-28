@@ -23,6 +23,16 @@
 #include "etmemd_threadtimer.h"
 #include "etmemd_task_exp.h"
 
+struct task_child_pid_params {
+    unsigned int child_pid;
+    struct vmas *vmas;
+    struct memory_grade *memory_grade;
+    struct page_refs *page_refs;
+    struct page_sort *page_sort;
+    struct task_pid *tpid;
+    struct task_child_pid_params *next;
+};
+
 struct task_pid {
     unsigned int pid;
     float rt_swapin_rate;   /* real time swapin rate */
@@ -45,5 +55,6 @@ void etmemd_print_tasks(int fd, const struct task *tk, char *engine_name, bool s
 
 struct task *etmemd_add_task(GKeyFile *config);
 void etmemd_remove_task(struct task *tk);
+void etmemd_free_task_child_pids(struct task *tk);
 
 #endif

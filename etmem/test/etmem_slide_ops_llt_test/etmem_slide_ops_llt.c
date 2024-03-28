@@ -275,9 +275,6 @@ static void test_etmem_task_swap_flag_error(void)
     CU_ASSERT_EQUAL(etmemd_project_remove_task(config), OPT_SUCCESS);
     destroy_slide_task_config(config);
 
-    /* run slide_do_migrate fail */
-    CU_ASSERT_EQUAL(slide_do_migrate(1, NULL), -1);
-
     task_test_fini();
 }
 
@@ -352,8 +349,110 @@ static void test_etmem_task_swap_threshold_error(void)
     CU_ASSERT_EQUAL(etmemd_project_remove_task(config), OPT_SUCCESS);
     destroy_slide_task_config(config);
 
-    /* run slide_do_migrate fail */
-    CU_ASSERT_EQUAL(slide_do_migrate(1, NULL), -1);
+    task_test_fini();
+}
+
+static void test_etmem_task_dram_percent_error(void)
+{
+    struct slide_task_test_param slide_task;
+    GKeyFile *config = NULL;
+
+    task_test_init();
+
+    /* empty value of dram_percent */
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    /* dram_percent too long */
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "12345678910234";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    /* dram_percent para is wrong*/
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "12hhG";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    /* dram_percent para is wrong*/
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "this";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    /* dram_percent para is wrong*/
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "101";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    /* dram_percent para is wrong*/
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "0";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    /* dram_percent para is wrong*/
+    init_slide_task(&slide_task);
+    slide_task.dram_percent = "-1";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_NOT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    task_test_fini();
+}
+
+static void test_etmem_task_dram_percent_ok(void)
+{
+    struct slide_task_test_param slide_task;
+    GKeyFile *config = NULL;
+
+    task_test_init();
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task1_dram_percent";
+    slide_task.dram_percent = "1";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task2_dram_percent";
+    slide_task.dram_percent = "2";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task3_dram_percent";
+    slide_task.dram_percent = "98";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task4_dram_percent";
+    slide_task.dram_percent = "99";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task5_dram_percent";
+    slide_task.dram_percent = "100";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
 
     task_test_fini();
 }
@@ -389,6 +488,33 @@ static void test_etmem_task_swap_threshold_ok(void)
     init_slide_task(&slide_task);
     slide_task.task_param.name = "task3_swap_threshold";
     slide_task.swap_threshold = "999999999g";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    slide_task.task_param.name = "task4_swap_threshold_5G";
+    slide_task.swap_threshold = "5m";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task5_swap_threshold_5g";
+    slide_task.swap_threshold = "5M";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task6_swap_threshold";
+    slide_task.swap_threshold = "123456789m";
+    config = construct_slide_task_config(&slide_task);
+    CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
+    destroy_slide_task_config(config);
+
+    init_slide_task(&slide_task);
+    slide_task.task_param.name = "task7_swap_threshold";
+    slide_task.swap_threshold = "999999999M";
     config = construct_slide_task_config(&slide_task);
     CU_ASSERT_EQUAL(etmemd_project_add_task(config), OPT_SUCCESS);
     destroy_slide_task_config(config);
@@ -564,9 +690,6 @@ static void test_task_slide_invalid_config(void)
     sleep(10);
     CU_ASSERT_EQUAL(etmemd_project_remove_task(config), OPT_SUCCESS);
     destroy_slide_task_config(config);
-
-    /* run slide_do_migrate fail */
-    CU_ASSERT_EQUAL(slide_do_migrate(1, NULL), -1);
 }
 
 void test_etmem_slide_task_002(void)
@@ -588,6 +711,16 @@ typedef enum {
 static void test_slide(void)
 {
     CU_ASSERT_EQUAL(system("../etmem_slide_ops_llt_test/test_slide_ops.sh"), 0);
+}
+
+static void test_slide_isula(void)
+{
+    CU_ASSERT_EQUAL(system("../etmem_slide_ops_llt_test/test_etmem_isula_ops.sh"), 0);
+}
+
+static void test_slide_dram_percent(void)
+{
+    CU_ASSERT_EQUAL(system("../etmem_slide_ops_llt_test/test_slide_dram_percent.sh"), 0);
 }
 
 int main(int argc, const char **argv)
@@ -619,7 +752,11 @@ int main(int argc, const char **argv)
         CU_ADD_TEST(suite, test_etmem_task_swap_flag_ok) == NULL ||
         CU_ADD_TEST(suite, test_etmem_task_swap_threshold_error) == NULL ||
         CU_ADD_TEST(suite, test_etmem_task_swap_threshold_ok) == NULL ||
-        CU_ADD_TEST(suite, test_slide) == NULL) {
+        CU_ADD_TEST(suite, test_etmem_task_dram_percent_ok) == NULL ||
+        CU_ADD_TEST(suite, test_etmem_task_dram_percent_error) == NULL ||
+        CU_ADD_TEST(suite, test_slide) == NULL ||
+        CU_ADD_TEST(suite, test_slide_dram_percent) == NULL ||
+        CU_ADD_TEST(suite, test_slide_isula) == NULL) {
             printf("CU_ADD_TEST fail. \n");
             goto ERROR;
     }

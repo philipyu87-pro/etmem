@@ -74,9 +74,9 @@ struct walk_address {
     uint64_t last_walk_end;             /* last walk address end */
 };
 
-/* the caller need to judge value returned by etmemd_do_scan(), NULL means fail. */
-struct page_refs *etmemd_do_scan(const struct task_pid *tpid, const struct task *tk);
-
+/* the caller need to judge value returned by etmemd_do_scan(), -1 means fail. */
+int etmemd_do_scan(const struct task_pid *tk_pid);
+ 
 #ifdef ENABLE_PMU
 #define BITS_IN_INT (sizeof(int) * CHAR_BIT) // get the number of bits in an int
 /* Assume the hardware events count following a power-law distribution */
@@ -118,7 +118,7 @@ void clean_memory_grade_unexpected(void *arg);
 
 void clean_page_sort_unexpected(void *arg);
 struct page_sort *alloc_page_sort(const struct task_pid *tk_pid);
-struct page_sort *sort_page_refs(struct page_refs **page_refs, const struct task_pid *tk_pid);
+int sort_page_refs(struct task_pid *tpid);
 
 struct page_refs *add_page_refs_into_memory_grade(struct page_refs *page_refs, struct page_refs **list);
 int init_g_page_size(void);

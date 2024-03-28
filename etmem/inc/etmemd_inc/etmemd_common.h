@@ -35,6 +35,7 @@
 
 #define BYTE_TO_KB(s)                   ((s) >> 10)
 #define KB_TO_BYTE(s)                   ((s) << 10)
+#define MB_TO_KB(s)                     ((s) << 10)
 #define GB_TO_KB(s)                     ((s) << 20)
 
 #define MAX_CONFIG_FILE_SIZE            (KB_TO_BYTE(10 * 1024))
@@ -45,7 +46,7 @@
 
 /* in some system the max length of pid may be larger than 5, so we use 10 herr */
 #define PID_STR_MAX_LEN                 10
-#define NAME_STR_MAX_LEN                15
+#define NAME_STR_MAX_LEN                20
 #define SWAP_THRESHOLD_MAX_LEN          10
 
 #define PIPE_FD_LEN                     2

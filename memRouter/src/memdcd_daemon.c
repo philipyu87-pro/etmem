@@ -94,7 +94,7 @@ static int memdcd_server_init(const char *sock_path)
 
     sock_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if (sock_fd < 0) {
-        memdcd_log(_LOG_ERROR, "Create socket for fail. err: %s", strerror_r(errno, error_str, ERROR_STR_MAX_LEN));
+        memdcd_log(_LOG_ERROR, "Create for socket failed. err: %s", strerror_r(errno, error_str, ERROR_STR_MAX_LEN));
         return -1;
     }
 
@@ -111,13 +111,13 @@ static int memdcd_server_init(const char *sock_path)
     sock_len += offsetof(struct sockaddr_un, sun_path);
 
     if (_set_socket_option(sock_fd) != 0) {
-        memdcd_log(_LOG_ERROR, "Set for socket fail. err: %s", strerror_r(errno, error_str, ERROR_STR_MAX_LEN));
+        memdcd_log(_LOG_ERROR, "Set for socket failed. err: %s", strerror_r(errno, error_str, ERROR_STR_MAX_LEN));
         close(sock_fd);
         return -1;
     }
 
     if (bind(sock_fd, (struct sockaddr *)&sock_addr, sock_len) != 0) {
-        memdcd_log(_LOG_ERROR, "Socket bind %s fail. err: %s",
+        memdcd_log(_LOG_ERROR, "Socket bind %s failed. err: %s",
             (char *)&sock_addr.sun_path[1], strerror_r(errno, error_str, ERROR_STR_MAX_LEN));
         close(sock_fd);
         return -1;
@@ -174,7 +174,7 @@ static int memdcd_accept(char *recv_buf)
 
     rc = recv(accp_fd, recv_buf, MAX_MESSAGE_LENGTH, 0);
     if (rc <= 0) {
-        memdcd_log(_LOG_WARN, "Socket recive from client fail. err: %s", \
+        memdcd_log(_LOG_WARN, "Socket recive from client failed. err: %s", \
             strerror_r(errno, error_str, ERROR_STR_MAX_LEN));
         ret = -1;
         goto close_fd;

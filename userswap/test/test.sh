@@ -150,7 +150,7 @@ function test_run_all()
     elif [ x"${RUN_MODE}" = x"" ]; then
         RUN_MODE=0
     else
-        echo -e "\033[;31mnot suport\033[0m run mode <${RUN_MODE}>"
+        echo -e "\033[;31mnot support\033[0m run mode <${RUN_MODE}>"
         usage
         cd -
         exit 1

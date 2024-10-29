@@ -524,7 +524,7 @@ static struct page_refs **update_page_refs(u_int64_t addr,
         return &((*page_refs)->next);
     }
 
-    /* if the address is behind the currnet node, return to operate next node */
+    /* if the address is behind the current node, return to operate next node */
     if (addr > (*page_refs)->addr) {
         page_refs = &((*page_refs)->next);
         return update_page_refs(addr, weight, type, page_refs);

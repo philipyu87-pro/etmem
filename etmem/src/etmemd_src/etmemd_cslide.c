@@ -514,7 +514,7 @@ static int init_node_verifier(struct node_verifier *nv, int node_num)
 {
     nv->nodes_map_count = calloc(node_num, sizeof(int));
     if (nv->nodes_map_count == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "alloc memroy for nodes_map_count failed\n");
+        etmemd_log(ETMEMD_LOG_ERR, "alloc memory for nodes_map_count failed\n");
         return -1;
     }
 

@@ -10,7 +10,7 @@
 #  * See the Mulan PSL v2 for more details.
 #  * Author: liubo
 #  * Create: 2021-12-07
-#  * Description: This is a shell script of the unit test for etmem commont functions
+#  * Description: This is a shell script of the unit test for etmem common functions
 #  ******************************************************************************/
 
 test_start_as_service()

@@ -314,7 +314,7 @@ enum opt_result etmemd_project_remove_task(GKeyFile *config)
         return ret;
     }
     if (tk == NULL) {
-        etmemd_log(ETMEMD_LOG_ERR, "task not exsit\n");
+        etmemd_log(ETMEMD_LOG_ERR, "task not exist\n");
         return OPT_TASK_NOEXIST;
     }
 

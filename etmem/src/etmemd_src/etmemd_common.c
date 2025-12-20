@@ -517,7 +517,7 @@ int get_swap_threshold_inKB(const char *string, unsigned long *value)
     }
 
     if (get_unsigned_long_value(swap_threshold_string, &swap_threshold_inGB) != 0) {
-        etmemd_log(ETMEMD_LOG_ERR, "get_unsigned_long_value swap_threshold faild.\n");
+        etmemd_log(ETMEMD_LOG_ERR, "get_unsigned_long_value swap_threshold failed.\n");
         goto free_out;
     }
 

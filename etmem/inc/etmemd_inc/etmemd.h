@@ -24,7 +24,7 @@
 #define PUD_SIZE_SHIFT 30
 
 /* memory grade is the result that judged by policy function after pagerefs come into it,
- * every policy fucntion has its own rule to make the choice which page is hot grade or
+ * every policy function has its own rule to make the choice which page is hot grade or
  * the other grades */
 struct memory_grade {
     struct page_refs *hot_pages;

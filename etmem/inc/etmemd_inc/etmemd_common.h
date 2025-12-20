@@ -63,7 +63,7 @@ struct ioctl_para {
  *
  * out:     bool *is_help   - whether it has option of help
  *
- * retrun:  0 - successed to parse
+ * return:  0 - successed to parse
  *          1 - failed to parse cmdline
  * */
 int etmemd_parse_cmdline(int argc, char *argv[], bool *is_help);

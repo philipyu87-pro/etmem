@@ -7,9 +7,11 @@ etmem configurations to enable memory tiering for QEMU/KVM VMs.
 
 import logging
 import os
+import re
 import signal
 import subprocess
 import sys
+import threading
 
 import libvirt
 
@@ -24,6 +26,15 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+def _is_valid_vm_name(vm_name):
+    """Return True if vm_name is safe to use in file paths.
+
+    Rejects names containing path separators, traversal sequences,
+    or characters that are invalid in file names.
+    """
+    return bool(vm_name) and re.match(r'^[A-Za-z0-9._-]+$', vm_name) is not None
 
 
 def get_vm_pid(vm_name):
@@ -65,7 +76,7 @@ def _render_config(template_content, vm_name, pid):
     content = template_content.replace("vm_name", vm_name)
     lines = []
     for line in content.splitlines():
-        if line.startswith("value="):
+        if line.lstrip().startswith("value="):
             line = f"value={pid}"
         lines.append(line)
     return "\n".join(lines) + "\n"
@@ -118,6 +129,9 @@ def enable_vm_etmem(vm_name, config_path):
 
 def handle_vm_started(vm_name):
     """Handle a VM start event: validate, create config, and enable etmem."""
+    if not _is_valid_vm_name(vm_name):
+        logger.error("VM name '%s' contains invalid characters, skipping", vm_name)
+        return
     pid = get_vm_pid(vm_name)
     if pid is None:
         return
@@ -131,6 +145,9 @@ def handle_vm_started(vm_name):
 
 def handle_vm_stopped(vm_name):
     """Handle a VM stop event: remove the etmem object and delete the config."""
+    if not _is_valid_vm_name(vm_name):
+        logger.error("VM name '%s' contains invalid characters, skipping", vm_name)
+        return
     config_path = get_vm_config_path(vm_name)
     if not os.path.exists(config_path):
         logger.info("No etmem config for VM %s, nothing to clean up", vm_name)
@@ -165,19 +182,19 @@ def register_lifecycle_event(conn):
     logger.info("Registered VIR_DOMAIN_EVENT_ID_LIFECYCLE callback")
 
 
-def setup_signal_handlers(stop_flag):
+def setup_signal_handlers(stop_event):
     """Register SIGTERM and SIGINT handlers to trigger graceful shutdown."""
     def handler(signum, frame):  # pylint: disable=unused-argument
         logger.info("Received signal %d, initiating shutdown", signum)
-        stop_flag.append(True)
+        stop_event.set()
 
     signal.signal(signal.SIGTERM, handler)
     signal.signal(signal.SIGINT, handler)
 
 
-def run_event_loop(stop_flag):
-    """Run the libvirt default event loop until the stop flag is set."""
-    while not stop_flag:
+def run_event_loop(stop_event):
+    """Run the libvirt default event loop until the stop event is set."""
+    while not stop_event.is_set():
         libvirt.virEventRunDefaultImpl()
 
 
@@ -186,16 +203,20 @@ def main():
     libvirt.virEventRegisterDefaultImpl()
     conn = libvirt.open(LIBVIRT_URI)
     if conn is None:
-        logger.error("Failed to connect to libvirt at %s", LIBVIRT_URI)
+        logger.error(
+            "Failed to connect to libvirt at %s. "
+            "Ensure libvirtd is running and this process has the required permissions.",
+            LIBVIRT_URI,
+        )
         sys.exit(1)
 
-    stop_flag = []
-    setup_signal_handlers(stop_flag)
+    stop_event = threading.Event()
+    setup_signal_handlers(stop_event)
     register_lifecycle_event(conn)
     logger.info("VM lifecycle monitor started, listening for events...")
 
     try:
-        run_event_loop(stop_flag)
+        run_event_loop(stop_event)
     finally:
         conn.close()
         logger.info("Disconnected from libvirt. Service stopped.")
